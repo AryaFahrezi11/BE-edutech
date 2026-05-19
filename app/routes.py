@@ -2,11 +2,13 @@ import os
 import io
 import json
 import re
+import jwt
+import datetime
 from flask import Blueprint, jsonify, request
 from google import genai 
 from google.genai import types
 import PIL.Image
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from app.extensions import db # Import DB
 from app.models import User # Import Model User
 
@@ -16,7 +18,44 @@ main = Blueprint('main', __name__)
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_KEY)
 
-# ... (endpoint / dan /api/login yang lama biarkan tetap aman) ...
+@main.route('/api/login', methods=['POST'])
+def login_user():
+    data = request.get_json()
+
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({"status": "error", "message": "Email dan Password wajib diisi!"}), 400
+
+    email = data['email'].strip().lower()
+    password = data['password']
+
+    # 1. Cari user di database
+    user = User.query.filter_by(email=email).first()
+
+    # 2. Cek apakah user ada dan passwordnya cocok
+    if not user or not check_password_hash(user.password, password):
+        return jsonify({"status": "error", "message": "Email atau Password salah!"}), 401
+
+    try:
+        # 3. Buat JWT Token
+        secret_key = os.getenv("JWT_SECRET_KEY", "fallback_rahasia_edutech")
+        payload = {
+            'user_id': user.id,
+            'email': user.email,
+            'role': user.role,
+            'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
+        }
+        token = jwt.encode(payload, secret_key, algorithm='HS256')
+
+        # 4. Kirim token ke Flutter
+        return jsonify({
+            "status": "success",
+            "message": f"Selamat datang kembali, {user.nama_lengkap}!",
+            "token": token,
+            "user": user.to_dict()
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal login: {str(e)}"}), 500
 
 @main.route('/api/register', methods=['POST'])
 def register_user():
@@ -65,7 +104,7 @@ def register_user():
 
         return jsonify({
             "status": "success",
-            "message": "Registrasi berhasil! Silakan login.",
+            "message": "Hore! Akun kamu berhasil dibuat. Sekarang, yuk masuk menggunakan email-mu!",
             "data": user_baru.to_dict()
         }), 201
 
