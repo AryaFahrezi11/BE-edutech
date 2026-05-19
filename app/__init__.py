@@ -1,15 +1,23 @@
+import os
 from flask import Flask
-from flask_cors import CORS
+from app.extensions import db # Import db dari extensions
 
 def create_app():
-    # Inisialisasi aplikasi Flask
     app = Flask(__name__)
     
-    # Buka akses CORS untuk semua domain (penting untuk Flutter)
-    CORS(app) 
-
-    # Daftarkan rute/endpoint dari routes.py
-    from .routes import main
+    # Konfigurasi Database dari .env
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # Inisialisasi database dengan app Flask
+    db.init_app(app)
+    
+    # Daftarkan blueprint routes kamu
+    from app.routes import main
     app.register_blueprint(main)
-
+    
+    # Membuat tabel secara otomatis jika belum ada di phpMyAdmin
+    with app.app_context():
+        db.create_all()
+        
     return app
