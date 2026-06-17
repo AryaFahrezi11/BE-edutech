@@ -11,12 +11,22 @@ import PIL.Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.extensions import db # Import DB
 from app.models import User # Import Model User
+import smtplib
+import random
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 
 main = Blueprint('main', __name__)
 
 # Inisialisasi client Gemini menggunakan API Key dari .env
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_KEY)
+
+# --- KONFIGURASI EMAIL PENGIRIM ---
+SENDER_EMAIL = os.getenv("SENDER_EMAIL") 
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+
 
 @main.route('/api/login', methods=['POST'])
 def login_user():
@@ -34,6 +44,14 @@ def login_user():
     # 2. Cek apakah user ada dan passwordnya cocok
     if not user or not check_password_hash(user.password, password):
         return jsonify({"status": "error", "message": "Email atau Password salah!"}), 401
+
+    # --- TAMBAHAN BARU: Validasi Status Verifikasi OTP ---
+    if not user.is_verified:
+        return jsonify({
+            "status": "unverified", # Status khusus untuk ditangkap oleh Flutter
+            "message": "Akun kamu belum diverifikasi! Yuk masukkan Kode Rahasia yang dikirim ke emailmu.",
+            "email": user.email # Berguna agar Flutter bisa langsung membawa email ini ke halaman OTP
+        }), 403 # Menggunakan kode 403 (Forbidden) karena akses ditolak
 
     try:
         # 3. Buat JWT Token
@@ -88,29 +106,95 @@ def register_user():
         # 4. Cek apakah email sudah terdaftar di database MySQL
         user_exist = User.query.filter_by(email=email).first()
         if user_exist:
+            # Jika user ada tapi belum verifikasi, kita bisa beri pesan khusus (Opsional)
+            if not user_exist.is_verified:
+                return jsonify({"status": "error", "message": "Email sudah terdaftar tapi belum diverifikasi. Silakan cek email untuk OTP."}), 409
             return jsonify({"status": "error", "message": "Email sudah terdaftar!"}), 409
 
         # 5. Hash Password demi keamanan
         hashed_password = generate_password_hash(password)
 
-        # 6. Buat objek User baru dan simpan (Commit) ke MySQL
+        # 6. Generate 6 Digit OTP
+        kode_otp = str(random.randint(100000, 999999))
+
+        # 7. Buat objek User baru (is_verified = False)
         user_baru = User(
             nama_lengkap=nama,
             email=email,
-            password=hashed_password
+            password=hashed_password,
+            otp_code=kode_otp,
+            is_verified=False
         )
         db.session.add(user_baru)
         db.session.commit() # Menyimpan permanen ke MySQL
 
+        # 8. Proses Kirim Email OTP
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = email
+        msg['Subject'] = "Kode Rahasia Edutech Kamu! 🚀"
+        
+        body = f"""
+        Halo {nama}! 👋
+        
+        Pendaftaran kamu hampir selesai.
+        Gunakan 6 digit Kode Rahasia di bawah ini untuk memverifikasi akun kamu:
+        
+        {kode_otp}
+        
+        Ayo mulai petualangan belajarmu! Jangan berikan kode ini ke siapapun ya.
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Mengirim email menggunakan server Gmail
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+
         return jsonify({
             "status": "success",
-            "message": "Hore! Akun kamu berhasil dibuat. Sekarang, yuk masuk menggunakan email-mu!",
-            "data": user_baru.to_dict()
+            "message": "Hore! Akun berhasil dibuat. Cek email kamu untuk melihat Kode Rahasia!",
+            "email": email # Dikirim balik agar Flutter tahu email siapa yang sedang diverifikasi
         }), 201
 
     except Exception as e:
-        db.session.rollback() # Batalkan jika ada error database
-        return jsonify({"status": "error", "message": f"Gagal menyimpan data: {str(e)}"}), 500
+        db.session.rollback() # Batalkan jika ada error database atau gagal kirim email
+        return jsonify({"status": "error", "message": f"Gagal memproses pendaftaran: {str(e)}"}), 500
+
+
+@main.route('/api/verify-otp', methods=['POST'])
+def verify_otp():
+    data = request.get_json()
+    email = data.get('email')
+    otp_input = data.get('otp')
+
+    if not email or not otp_input:
+        return jsonify({"status": "error", "message": "Email dan OTP wajib diisi!"}), 400
+
+    try:
+        # Cari user berdasarkan email
+        user = User.query.filter_by(email=email).first()
+
+        if not user:
+            return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
+
+        if user.is_verified:
+            return jsonify({"status": "error", "message": "Akun ini sudah diverifikasi sebelumnya!"}), 400
+
+        # Cocokkan OTP
+        if user.otp_code == otp_input:
+            user.is_verified = True
+            user.otp_code = None # Hapus OTP karena sudah terpakai
+            db.session.commit()
+            return jsonify({"status": "success", "message": "Yey! Verifikasi berhasil. Silakan Login!"}), 200
+        else:
+            return jsonify({"status": "error", "message": "Kode rahasia salah, coba lagi ya!"}), 400
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"Gagal memverifikasi: {str(e)}"}), 500
 
 @main.route('/api/ujian-menulis-gemini', methods=['POST'])
 def ujian_menulis_gemini():
@@ -129,7 +213,7 @@ def ujian_menulis_gemini():
         # Rancang Prompt untuk Gemini
         prompt = f"""
         Kamu adalah seorang guru Sekolah Dasar (SD) yang sangat ramah, penyabar, dan suportif.
-        Tugasmu adalah memeriksa gambar tulisan tangan anak-anak pada aplikasi edukasi literasi bernama LITERA-DASH.
+        Tugasmu adalah memeriksa gambar tulisan tangan anak-anak pada aplikasi edukasi literasi bernama Edutech.
         
         Anak ini ditugaskan untuk menulis {kategori}: "{target_materi}".
         Periksa gambar yang dilampirkan dengan saksama:
