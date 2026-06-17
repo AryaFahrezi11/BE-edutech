@@ -132,7 +132,7 @@ def register_user():
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
         msg['To'] = email
-        msg['Subject'] = "Kode Rahasia Edutech Kamu! 🚀"
+        msg['Subject'] = "Kode OTP Edutech Kamu! 🚀"
         
         body = f"""
         Halo {nama}! 👋
