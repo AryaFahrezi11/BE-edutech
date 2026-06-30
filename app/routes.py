@@ -269,3 +269,180 @@ def ujian_menulis_gemini():
         }), 500
     except Exception as e:
         return jsonify({"status": "error", "message": f"Terjadi kesalahan pada server: {str(e)}"}), 500
+
+
+@main.route('/api/sync-progress', methods=['POST'])
+def sync_progress():
+    from app.models import User, UserProgress # Import UserProgress
+    data = request.get_json()
+    email = data.get('email')
+    
+    if not email:
+        return jsonify({"status": "error", "message": "Email diperlukan untuk sinkronisasi"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"status": "error", "message": "User tidak ditemukan"}), 404
+
+    try:
+        # Buat progress record jika belum ada
+        if not user.progress:
+            progress = UserProgress(user_id=user.id)
+            db.session.add(progress)
+            db.session.commit()
+            
+        progress = user.progress
+
+        # Update fields jika ada di payload JSON
+        if 'total_points' in data:
+            progress.total_points = data['total_points']
+        if 'streak_days' in data:
+            progress.streak_days = data['streak_days']
+        if 'last_login_date' in data:
+            progress.last_login_date = data['last_login_date']
+        if 'completed_items' in data:
+            import json
+            progress.completed_items = json.dumps(data['completed_items'])
+        
+        if 'unlocked_writing_letter' in data:
+            progress.unlocked_writing_letter = data['unlocked_writing_letter']
+        if 'unlocked_writing_word' in data:
+            progress.unlocked_writing_word = data['unlocked_writing_word']
+        if 'unlocked_spelling_letter' in data:
+            progress.unlocked_spelling_letter = data['unlocked_spelling_letter']
+        if 'unlocked_spelling_word' in data:
+            progress.unlocked_spelling_word = data['unlocked_spelling_word']
+            
+        if 'current_mission_index' in data:
+            progress.current_mission_index = data['current_mission_index']
+        if 'completed_missions' in data:
+            import json
+            progress.completed_missions = json.dumps(data['completed_missions'])
+
+        db.session.commit()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Progress berhasil disinkronkan ke server",
+            "progress": progress.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"Gagal sinkronisasi: {str(e)}"}), 500
+
+@main.route('/api/get-progress', methods=['GET'])
+def get_progress():
+    from app.models import User, UserProgress # Import UserProgress
+    email = request.args.get('email')
+    
+    if not email:
+        return jsonify({"status": "error", "message": "Email diperlukan"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"status": "error", "message": "User tidak ditemukan"}), 404
+        
+    if not user.progress:
+        # Jika belum ada progress, buatkan baru dengan nilai default 0
+        progress = UserProgress(user_id=user.id)
+        db.session.add(progress)
+        db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "progress": user.progress.to_dict()
+    }), 200
+
+@main.route('/api/leaderboard', methods=['GET'])
+def get_leaderboard():
+    from app.models import User, UserProgress
+    try:
+        # Join User and UserProgress, order by total_points DESC
+        leaderboard_data = db.session.query(User, UserProgress).join(
+            UserProgress, User.id == UserProgress.user_id
+        ).order_by(UserProgress.total_points.desc()).all()
+
+        results = []
+        for rank, (user, progress) in enumerate(leaderboard_data, start=1):
+            emoji = user.profile_pict if user.profile_pict else "🧒"
+            
+            # Format skor agar ada titik ribuan (misal 1500 -> 1.500)
+            score_formatted = f"{progress.total_points:,}".replace(',', '.')
+            
+            results.append({
+                "rank": rank,
+                "name": user.nama_lengkap,
+                "score": score_formatted,
+                "emoji": emoji,
+                "email": user.email,
+                "active": False # Akan diset di frontend
+            })
+
+        return jsonify({
+            "status": "success",
+            "leaderboard": results
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal mengambil leaderboard: {str(e)}"}), 500
+
+@main.route('/api/activity/log', methods=['POST'])
+def add_activity_log():
+    from app.models import User, ActivityLog
+    data = request.get_json()
+    email = data.get('email')
+    action = data.get('action')
+    description = data.get('description', '')
+    points = data.get('points', 0)
+
+    if not email or not action:
+        return jsonify({"status": "error", "message": "Email dan action wajib diisi!"}), 400
+
+    try:
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
+
+        new_log = ActivityLog(
+            user_id=user.id,
+            action=action,
+            description=description,
+            points_earned=points
+        )
+        db.session.add(new_log)
+        db.session.commit()
+
+        return jsonify({
+            "status": "success",
+            "message": "Log aktivitas berhasil disimpan",
+            "log": new_log.to_dict()
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"Gagal menyimpan log: {str(e)}"}), 500
+
+@main.route('/api/activity/logs', methods=['POST'])
+def get_activity_logs():
+    from app.models import User, ActivityLog
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({"status": "error", "message": "Email wajib diisi!"}), 400
+
+    try:
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
+
+        logs = ActivityLog.query.filter_by(user_id=user.id).order_by(ActivityLog.timestamp.desc()).limit(50).all()
+        
+        return jsonify({
+            "status": "success",
+            "logs": [log.to_dict() for log in logs]
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal mengambil logs: {str(e)}"}), 500
