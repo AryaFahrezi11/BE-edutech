@@ -52,7 +52,8 @@ class UserProgress(db.Model):
     last_login_date = db.Column(db.String(20), nullable=True)
     completed_items = db.Column(db.Text, default="[]") # Menyimpan JSON String
     
-    unlocked_writing_letter = db.Column(db.Integer, default=0)
+    unlocked_writing_letter = db.Column(db.Integer, default=0) # Huruf Kapital
+    unlocked_writing_lowercase = db.Column(db.Integer, default=0) # Huruf Kecil
     unlocked_writing_word = db.Column(db.Integer, default=0)
     unlocked_spelling_letter = db.Column(db.Integer, default=0)
     unlocked_spelling_word = db.Column(db.Integer, default=0)
@@ -76,10 +77,11 @@ class UserProgress(db.Model):
         return {
             "total_points": self.total_points,
             "streak_days": self.streak_days,
-            "last_login_date": self.last_login_date,
+            'last_login_date': self.last_login_date.isoformat() if hasattr(self.last_login_date, 'isoformat') else self.last_login_date,
             "completed_items": items_list,
-            "unlocked_writing_letter": self.unlocked_writing_letter,
-            "unlocked_writing_word": self.unlocked_writing_word,
+            'unlocked_writing_letter': self.unlocked_writing_letter,
+            'unlocked_writing_lowercase': self.unlocked_writing_lowercase,
+            'unlocked_writing_word': self.unlocked_writing_word,
             "unlocked_spelling_letter": self.unlocked_spelling_letter,
             "unlocked_spelling_word": self.unlocked_spelling_word,
             "current_mission_index": self.current_mission_index,

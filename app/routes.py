@@ -202,7 +202,7 @@ def ujian_menulis_gemini():
         return jsonify({"status": "error", "message": "File gambar tidak ditemukan!"}), 400
     
     file_gambar = request.files['gambar']
-    target_materi = request.form.get('target', 'A').upper().strip()
+    target_materi = request.form.get('target', 'A').strip()
     kategori = request.form.get('kategori', 'huruf')
 
     try:
@@ -306,6 +306,8 @@ def sync_progress():
         
         if 'unlocked_writing_letter' in data:
             progress.unlocked_writing_letter = data['unlocked_writing_letter']
+        if 'unlocked_writing_lowercase' in data:
+            progress.unlocked_writing_lowercase = data['unlocked_writing_lowercase']
         if 'unlocked_writing_word' in data:
             progress.unlocked_writing_word = data['unlocked_writing_word']
         if 'unlocked_spelling_letter' in data:
@@ -446,3 +448,35 @@ def get_activity_logs():
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Gagal mengambil logs: {str(e)}"}), 500
+
+@main.route('/api/update-profile', methods=['POST'])
+def update_profile():
+    from app.models import User
+    data = request.get_json()
+    email = data.get('email')
+    nama_lengkap = data.get('nama_lengkap')
+    profile_pict = data.get('profile_pict')
+
+    if not email:
+        return jsonify({"status": "error", "message": "Email wajib diisi!"}), 400
+
+    try:
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
+
+        if nama_lengkap:
+            user.nama_lengkap = nama_lengkap
+        if profile_pict:
+            user.profile_pict = profile_pict
+
+        db.session.commit()
+        return jsonify({
+            "status": "success",
+            "message": "Profil berhasil diperbarui",
+            "user": user.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": f"Gagal memperbarui profil: {str(e)}"}), 500
