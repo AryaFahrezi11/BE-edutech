@@ -11,17 +11,19 @@ import PIL.Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.extensions import db # Import DB
 from app.models import User # Import Model User
+from app.ai.predictor import predict_image
 import smtplib
 import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-
 main = Blueprint('main', __name__)
 
-# Inisialisasi client Gemini menggunakan API Key dari .env
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_KEY)
+
+
+# --- KONFIGURASI EMAIL PENGIRIM ---
+SENDER_EMAIL = os.getenv("SENDER_EMAIL") 
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
 
 # --- KONFIGURASI EMAIL PENGIRIM ---
 SENDER_EMAIL = os.getenv("SENDER_EMAIL") 
@@ -196,74 +198,349 @@ def verify_otp():
         db.session.rollback()
         return jsonify({"status": "error", "message": f"Gagal memverifikasi: {str(e)}"}), 500
 
+
+
+
 @main.route('/api/ujian-menulis-gemini', methods=['POST'])
 def ujian_menulis_gemini():
-    if 'gambar' not in request.files:
-        return jsonify({"status": "error", "message": "File gambar tidak ditemukan!"}), 400
-    
-    file_gambar = request.files['gambar']
-    target_materi = request.form.get('target', 'A').strip()
-    kategori = request.form.get('kategori', 'huruf')
+    import time
+    import logging
+    import concurrent.futures 
+
+    start_time = time.time()
+    app_logger = logging.getLogger(__name__)
+
+    model_param = (request.form.get('model', 'cnn') or 'cnn').strip().lower()  # 'cnn' | 'mlkit'
+    target = (request.form.get('target', 'A') or 'A').upper().strip()
+    kategori = (request.form.get('kategori', 'huruf') or 'huruf').lower().strip()  # 'huruf' | 'kata'
+    hasil_ocr = (request.form.get('hasil_ocr', '') or '').strip()
+
+    # untuk logging (tidak dikirim ke client)
+    hasil_cnn = None
+
+    app_logger.info(
+        "[ujian-menulis-gemini] start model=%s target=%s kategori=%s",
+        model_param, target, kategori
+    )
+
+    if model_param not in ('cnn', 'mlkit'):
+        return jsonify({"status": "error", "message": "Parameter model tidak valid. Gunakan 'cnn' atau 'mlkit'."}), 400
+
+    def _extract_status_code(e, default=None):
+        # coba ambil dari atribut umum
+        for attr in ("status_code", "code", "status", "http_status"):
+            if hasattr(e, attr):
+                try:
+                    val = getattr(e, attr)
+                    if isinstance(val, int):
+                        return val
+                except Exception:
+                    pass
+
+        # fallback dari string
+        s = str(e) if e is not None else ""
+        m = re.search(r"\b(3\d\d)\b", s)
+        if m:
+            try:
+                return int(m.group(1))
+            except Exception:
+                pass
+        return default
+
+    def _handle_gemini_error(e):
+        """Return (http_status, response_json_dict) untuk exception Gemini."""
+        raw_msg = str(e)
+        exc_type = type(e).__name__
+        status_code = _extract_status_code(e)
+
+        # Logging sesuai permintaan
+        app_logger.error(
+            "[ujian-menulis-gemini] gemini exception type=%s status_code=%s raw_message=%s",
+            exc_type, status_code, raw_msg
+        )
+
+        s = raw_msg.upper()
+
+        # 1) high demand: ServerError 503 UNAVAILABLE ... high demand
+        is_server_error = ("SERVERERROR" in s) or ("GOOGLE.GENAI.ERRORS.SERVERERROR" in s)
+        is_503_unavailable_high_demand = (
+            (status_code == 503 or "503" in s) and
+            ("UNAVAILABLE" in s) and
+            ("HIGH DEMAND" in s)
+        )
+        if is_server_error or is_503_unavailable_high_demand:
+            return 503, {
+                "status": "error",
+                "message": "AI sedang sibuk karena banyak permintaan. Silakan coba lagi beberapa saat."
+            }
+
+        # 2) quota exceeded: RESOURCE_EXHAUSTED / Quota exceeded / HTTP 429
+        is_resource_exhausted = ("RESOURCE_EXHAUSTED" in s)
+        is_quota_exceeded = ("QUOTA EXCEEDED" in s) or ("QUOTA" in s and "EXCEEDED" in s)
+        is_429 = (status_code == 429) or ("429" in s)
+        if is_resource_exhausted or is_quota_exceeded or is_429:
+            return 429, {
+                "status": "error",
+                "message": "Kuota API Gemini telah habis. Silakan coba lagi nanti."
+            }
+
+        # 3) lainnya => 500, message = pesan error sebenarnya
+        return 500, {"status": "error", "message": raw_msg}
 
     try:
-        # Konversi gambar biner ke PIL Image
-        img_bytes = file_gambar.read()
-        img = PIL.Image.open(io.BytesIO(img_bytes))
+        # OCR stage (hanya untuk cnn)
+        if model_param == 'cnn':
+            if 'gambar' not in request.files:
+                return jsonify({"status": "error", "message": "File gambar tidak ditemukan!"}), 400
 
-        # Rancang Prompt untuk Gemini
-        prompt = f"""
-        Kamu adalah seorang guru Sekolah Dasar (SD) yang sangat ramah, penyabar, dan suportif.
-        Tugasmu adalah memeriksa gambar tulisan tangan anak-anak pada aplikasi edukasi literasi bernama Edutech.
-        
-        Anak ini ditugaskan untuk menulis {kategori}: "{target_materi}".
-        Periksa gambar yang dilampirkan dengan saksama:
-        1. Apakah tulisan tersebut sudah terbaca jelas sebagai "{target_materi}"?
-        2. Berikan skor dari 0 sampai 100.
-        3. Berikan jumlah bintang (0 sampai 3) berdasarkan kualitas tulisan.
-        4. Berikan umpan balik (pesan) motivasi yang singkat, ceria, dan membangun dalam bahasa Indonesia.
+            file_gambar = request.files['gambar']
+            ocr_result = predict_image(file_gambar)  # {prediction, confidence}
+            hasil_ocr = (ocr_result.get('prediction') or '').strip()
+            hasil_cnn = {
+                "prediction": ocr_result.get('prediction'),
+                "confidence": ocr_result.get('confidence')
+            }
+        else:
+            if not hasil_ocr:
+                return jsonify({"status": "error", "message": "Hasil OCR tidak ditemukan untuk model='mlkit'!"}), 400
 
-        PENTING: Kamu HANYA boleh merespons dalam format JSON mentah tanpa menggunakan format markdown seperti ```json atau teks tambahan lainnya di luar kurung kurawal. 
+        if not hasil_ocr:
+            return jsonify({"status": "error", "message": "Hasil OCR tidak ditemukan!"}), 400
 
-        Struktur JSON harus persis seperti ini:
-        {{
-            "skor": 85,
-            "bintang": 3,
-            "lulus": true,
-            "pesan": "Teks pesan motivasimu di sini"
-        }}
-        """
+        # Gemini evaluator stage
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_key:
+            return jsonify({"status": "error", "message": "GEMINI_API_KEY tidak ditemukan di environment runtime"}), 500
 
-        # --- PERUBAHAN UNTUK SDK BARU ---
-        # Menggunakan client.models.generate_content dan model gemini-2.5-flash yang super cepat
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[prompt, img]
-        )
-        
-        # --- PERBAIKAN CLEANSING TEKS GEMINI ---
-        clean_text = response.text.strip()
-        
-        # Bersihkan semua kemungkinan tag markdown yang merusak json.loads
+        local_client = genai.Client(api_key=gemini_key)
+
+        # Satu prompt yang sama untuk kedua model
+        prompt = f"""Kamu adalah guru SD yang ramah, sabar, dan penyemangat.
+Tugasmu BUKAN membaca gambar atau melakukan OCR.
+Tugasmu adalah MENGEVALUASI hasil tulisan anak berdasarkan teks yang sudah dikirimkan kepadamu.
+
+Informasi yang kamu terima:
+- Hasil OCR (teks tulisan anak): "{hasil_ocr}"
+- Jawaban yang benar: "{target}"
+- Jenis ujian: "{kategori}" (nilai: 'huruf' atau 'kata')
+
+Langkah 1 — Tentukan status:
+- Bandingkan hasil tulisan dengan jawaban benar (abaikan huruf besar/kecil).
+- Jika sama → status = "benar"
+- Jika berbeda → status = "salah"
+
+Langkah 2 — Buat feedback:
+- Jika status = "salah": jelaskan letak kesalahannya secara sederhana, sebutkan huruf/kata yang salah dan yang seharusnya, lalu beri semangat untuk mencoba lagi.
+  Jika jenis ujian = 'kata' dan ada huruf yang kurang baik, sebutkan huruf tersebut.
+- Jika status = "benar": beri pujian yang hangat.
+  Jika tulisan masih kurang rapi, berikan saran yang lembut agar makin baik.
+
+=== ATURAN PENULISAN ===
+- Bahasa Indonesia yang singkat, positif, ramah anak SD.
+- Maksimal 2 kalimat untuk field "feedback".
+- Jangan gunakan istilah teknis (jangan sebut OCR, gambar, model AI, dll).
+- Field "tts" untuk Text-to-Speech, tanpa simbol aneh.
+
+Jawab HANYA dalam format JSON berikut:
+{{
+  "status": "benar" atau "salah",
+  "feedback": "kalimat evaluasi singkat",
+  "tts": "kalimat yang akan dibacakan"
+}}"""
+
+        def call_gemini():
+            return local_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[prompt]
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(call_gemini)
+            response = future.result(timeout=25)
+
+        clean_text = (response.text or '').strip()
         if "```json" in clean_text:
             clean_text = clean_text.split("```json")[1].split("```")[0].strip()
         elif "```" in clean_text:
             clean_text = clean_text.split("```")[1].strip()
-            
-        # Cari kurung kurawal pertama dan terakhir untuk memastikan hanya mengambil objek JSON
+
         start_idx = clean_text.find("{")
         end_idx = clean_text.rfind("}") + 1
-        if start_idx != -1 and end_idx != -1:
+        if start_idx != -1 and end_idx > start_idx:
             clean_text = clean_text[start_idx:end_idx]
 
         hasil_json = json.loads(clean_text)
-        return jsonify({
+        status_eval = hasil_json.get('status', 'salah')
+
+        feedback = hasil_json.get('feedback', '')
+        tts = hasil_json.get('tts', '')
+
+        result = "correct" if status_eval == "benar" else "incorrect"
+
+        total_time_ms = int((time.time() - start_time) * 1000)
+        response_json = {
             "status": "success",
-            "hasil_analisis": hasil_json
+            "result": result,
+            "feedback": feedback,
+            "tts": tts
+        }
+
+        app_logger.info(
+            "[ujian-menulis-gemini] done model=%s target=%s hasil_ocr=%s hasil_cnn=%s feedback=%s waktu_ms=%s response_json=%s",
+            model_param, target, hasil_ocr, hasil_cnn, feedback, total_time_ms, response_json
+        )
+
+        return jsonify(response_json), 200
+
+    except concurrent.futures.TimeoutError:
+
+        total_time_ms = int((time.time() - start_time) * 1000)
+        response_json = {
+            "status": "error",
+            "message": "Proses evaluasi memakan waktu terlalu lama. Coba lagi ya."
+        }
+        app_logger.error(
+            "[ujian-menulis-gemini] timeout model=%s target=%s hasil_ocr=%s hasil_cnn=%s feedback=%s waktu_ms=%s response_json=%s",
+            model_param, target, hasil_ocr, hasil_cnn, None, total_time_ms, response_json
+        )
+        return jsonify(response_json), 504
+
+    except json.JSONDecodeError:
+        total_time_ms = int((time.time() - start_time) * 1000)
+        response_json = {
+            "status": "error",
+            "message": "Gemini gagal mengembalikan format data yang sesuai."
+        }
+        app_logger.exception(
+            "[ujian-menulis-gemini] JSONDecodeError model=%s target=%s hasil_ocr=%s hasil_cnn=%s feedback=%s waktu_ms=%s response_json=%s",
+            model_param, target, hasil_ocr, hasil_cnn, None, total_time_ms, response_json
+        )
+        return jsonify(response_json), 500
+
+    except Exception as e:
+        http_status, response_json = _handle_gemini_error(e)
+        return jsonify(response_json), http_status
+
+
+
+    
+
+
+
+    # Endpoint tidak diubah sesuai instruksi.
+    if request.content_type and 'multipart/form-data' not in request.content_type:
+        # tetap izinkan, tapi untuk project ini biasanya flutter kirim multipart
+        pass
+
+
+    target = request.form.get('target_huruf_atau_kata', '').strip()
+    hasil_ocr = request.form.get('hasil_ocr', '').strip()
+    model_lokasi = request.form.get('model', '').strip()
+
+    if not target:
+        return jsonify({"status": "error", "message": "target_huruf_atau_kata wajib diisi!"}), 400
+    if not hasil_ocr:
+        return jsonify({"status": "error", "message": "hasil_ocr wajib diisi!"}), 400
+
+    try:
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_key:
+            return jsonify({"status": "error", "message": "GEMINI_API_KEY tidak ditemukan di environment runtime"}), 500
+
+        local_client = genai.Client(api_key=gemini_key)
+
+        # Tentukan kategori: huruf (1 karakter) atau kata
+        stripped_target = target.replace(' ', '')
+        jenis_ujian = 'huruf' if len(stripped_target) == 1 else 'kata'
+        jawaban_benar = stripped_target.upper()  # normalisasi untuk pembandingan
+
+        prompt = f"""Kamu adalah guru SD yang ramah, sabar, dan penyemangat.
+Tugasmu BUKAN membaca gambar atau melakukan OCR.
+Tugasmu adalah MENGEVALUASI hasil tulisan anak berdasarkan teks yang sudah dikirimkan kepadamu.
+
+Informasi yang kamu terima:
+- Target (huruf atau kata yang seharusnya ditulis): "{jawaban_benar}"
+- Hasil OCR (teks tulisan anak yang sudah terbaca oleh sistem): "{hasil_ocr}"
+- Jenis ujian: "{jenis_ujian}" (nilai: 'huruf' untuk satu huruf, 'kata' untuk satu kata)
+- Keterangan model (hanya info tambahan, tidak perlu dibahas ke anak): "{model_lokasi}"
+
+=== LANGKAH EVALUASI ===
+Langkah 1 — Tentukan status:
+- Bandingkan hasil OCR dengan target (abaikan perbedaan huruf besar-kecil).
+- Jika sama → status = "benar"
+- Jika berbeda → status = "salah"
+
+Langkah 2 — Buat feedback berdasarkan status:
+
+>> Jika status = "salah":
+1) Jelaskan kemungkinan kesalahannya.
+2) Sebutkan kesalahan yang cocok dengan contoh ini:
+   - Garis masih kurang lurus.
+   - Lengkungan masih kurang rapi.
+   - Huruf masih terlihat seperti huruf lain.
+   - Coba tulis lebih pelan.
+3) Jika jenis ujian = 'huruf': sebutkan bentuk huruf yang perlu diperbaiki dengan contoh:
+   - garisnya bisa dibuat lebih lurus
+   - lengkungannya bisa dibuat lebih rapi
+   - ukurannya bisa dibuat lebih besar
+   - hurufnya bisa dibuat lebih jelas
+4) Jika jenis ujian = 'kata': sebutkan huruf tertentu yang kurang rapi bila memungkinkan.
+   Contoh pola kalimat: "Huruf B pada kata \"BOLA\" masih kurang rapi, coba buat lengkungannya lebih jelas ya."
+5) Tutup dengan kalimat semangat agar anak mau mencoba lagi.
+
+>> Jika status = "benar":
+1) Berikan pujian yang hangat dan menyemangatkan.
+2) Jika bentuk masih kurang rapi, beri saran lembut (maks 1 saran).
+   Contoh:
+   - Huruf A sudah benar, tetapi garis kirinya bisa dibuat lebih lurus.
+   - Huruf B sudah bagus, lengkungan atas bisa dibuat sedikit lebih bulat.
+   - Tulisanmu sudah benar, coba ukuran huruf dibuat lebih konsisten.
+
+=== ATURAN PENULISAN ===
+- Gunakan bahasa Indonesia yang singkat, positif, dan ramah anak SD.
+- Field "feedback" maksimal 2 kalimat.
+- Jangan gunakan istilah teknis (jangan sebut OCR, gambar, model AI, dll).
+- Field "tts" berisi kalimat yang akan dibacakan oleh Text To Speech.
+  Pastikan "tts":
+  - tidak mengandung simbol seperti *, #, /, \\ atau tanda baca aneh
+  - terdengar natural saat dibacakan
+  - boleh sedikit berbeda dari feedback supaya enak didengar.
+
+Jawab HANYA dalam format JSON berikut (tanpa markdown, tanpa komentar, tanpa teks lain di luar JSON):
+{{
+  "status": "benar" atau "salah",
+  "feedback": "kalimat evaluasi singkat untuk ditampilkan di layar aplikasi",
+  "tts": "kalimat yang akan langsung dibacakan ke anak melalui Text to Speech"
+}}"""
+
+        response = local_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[prompt]
+        )
+
+        clean_text = response.text.strip()
+
+        if "```json" in clean_text:
+            clean_text = clean_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in clean_text:
+            clean_text = clean_text.split("```")[1].strip()
+
+        start_idx = clean_text.find("{")
+        end_idx = clean_text.rfind("}") + 1
+        if start_idx != -1 and end_idx > start_idx:
+            clean_text = clean_text[start_idx:end_idx]
+
+        hasil_json = json.loads(clean_text)
+
+        return jsonify({
+            "status": hasil_json.get("status", "salah"),
+            "feedback": hasil_json.get("feedback", ""),
+            "tts": hasil_json.get("tts", "")
         }), 200
 
     except json.JSONDecodeError:
         return jsonify({
-            "status": "error", 
+            "status": "error",
             "message": "Gemini gagal mengembalikan format data yang sesuai.",
             "raw_response": response.text
         }), 500
@@ -480,3 +757,30 @@ def update_profile():
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": f"Gagal memperbarui profil: {str(e)}"}), 500
+
+@main.route('/api/predict', methods=['POST'])
+def predict_handwriting():
+
+    if 'gambar' not in request.files:
+        return jsonify({
+            "status": "error",
+            "message": "File gambar tidak ditemukan"
+        }), 400
+
+    try:
+        file = request.files['gambar']
+
+        result = predict_image(file)
+
+        return jsonify({
+            "status": "success",
+            "prediction": result["prediction"],
+            "confidence": result["confidence"]
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+

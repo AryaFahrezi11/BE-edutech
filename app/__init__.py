@@ -6,7 +6,14 @@ from flask_cors import CORS
 def create_app():
     app = Flask(__name__)
     CORS(app)  # Aktifkan CORS untuk semua rute
-    
+
+    # Pastikan .env ter-load saat app factory dipanggil
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+
     # Konfigurasi Database dari .env
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
