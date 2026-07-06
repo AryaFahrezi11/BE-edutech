@@ -5,12 +5,14 @@ import re
 import jwt
 import datetime
 from flask import Blueprint, jsonify, request
-from google import genai 
+from google import genai
 from google.genai import types
 import PIL.Image
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.extensions import db # Import DB
-from app.models import User # Import Model User
+from app.extensions import db  # MongoDB handle
+from app.models import User, UserProgress, ActivityLog
+
+from app.ai.predictor import predict_image
 import smtplib
 import random
 from email.mime.text import MIMEText
@@ -20,12 +22,9 @@ from pymongo import MongoClient
 
 main = Blueprint('main', __name__)
 
-# Inisialisasi client Gemini menggunakan API Key dari .env
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=GEMINI_KEY)
 
 # --- KONFIGURASI EMAIL PENGIRIM ---
-SENDER_EMAIL = os.getenv("SENDER_EMAIL") 
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
 
 # --- MONGODB ATLAS CONNECTION ---
@@ -33,6 +32,29 @@ MONGO_URI = os.getenv("MONGO_URI")
 mongo_client = MongoClient(MONGO_URI) if MONGO_URI else None
 mongo_db = mongo_client['edutech_db'] if mongo_client is not None else None
 mongo_collection = mongo_db['writing_analytics'] if mongo_db is not None else None
+
+
+def _now_ts_str():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _ensure_defaults_user_doc(doc: dict) -> dict:
+    if not doc:
+        return None
+    d = dict(doc)
+    if "id" not in d:
+        d["id"] = d.get("_id")
+    return d
+
+
+def _get_next_counter_seq(counter_name: str) -> int:
+    counter = db["counters"].find_one_and_update(
+        {"name": counter_name},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True,
+    )
+    return int(counter.get("seq", 0))
 
 
 @main.route('/api/login', methods=['POST'])
@@ -45,48 +67,45 @@ def login_user():
     email = data['email'].strip().lower()
     password = data['password']
 
-    # 1. Cari user di database
-    user = User.query.filter_by(email=email).first()
+    users_col = db[User.COLLECTION]
+    user_doc = users_col.find_one({"email": email})
+    user_doc = _ensure_defaults_user_doc(user_doc)
 
-    # 2. Cek apakah user ada dan passwordnya cocok
-    if not user or not check_password_hash(user.password, password):
+    if not user_doc or not check_password_hash(user_doc.get("password"), password):
         return jsonify({"status": "error", "message": "Email atau Password salah!"}), 401
 
-    # --- TAMBAHAN BARU: Validasi Status Verifikasi OTP ---
-    if not user.is_verified:
+    if not user_doc.get("is_verified", False):
         return jsonify({
-            "status": "unverified", # Status khusus untuk ditangkap oleh Flutter
+            "status": "unverified",
             "message": "Akun kamu belum diverifikasi! Yuk masukkan Kode Rahasia yang dikirim ke emailmu.",
-            "email": user.email # Berguna agar Flutter bisa langsung membawa email ini ke halaman OTP
-        }), 403 # Menggunakan kode 403 (Forbidden) karena akses ditolak
+            "email": user_doc.get("email")
+        }), 403
 
     try:
-        # 3. Buat JWT Token
         secret_key = os.getenv("JWT_SECRET_KEY", "fallback_rahasia_edutech")
         payload = {
-            'user_id': user.id,
-            'email': user.email,
-            'role': user.role,
+            'user_id': user_doc.get('id'),
+            'email': user_doc.get('email'),
+            'role': user_doc.get('role'),
             'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
         }
         token = jwt.encode(payload, secret_key, algorithm='HS256')
 
-        # 4. Kirim token ke Flutter
         return jsonify({
             "status": "success",
-            "message": f"Selamat datang kembali, {user.nama_lengkap}!",
+            "message": f"Selamat datang kembali, {user_doc.get('nama_lengkap')}!",
             "token": token,
-            "user": user.to_dict()
+            "user": User.to_dict(user_doc)
         }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Gagal login: {str(e)}"}), 500
 
+
 @main.route('/api/register', methods=['POST'])
 def register_user():
     data = request.get_json()
 
-    # 1. Validasi Input Kosong
     if not data or not all(k in data for k in ('nama_lengkap', 'email', 'password', 'konfirmasi_password')):
         return jsonify({"status": "error", "message": "Semua kolom wajib diisi!"}), 400
 
@@ -98,62 +117,62 @@ def register_user():
     if not nama or not email or not password:
         return jsonify({"status": "error", "message": "Data tidak boleh kosong!"}), 400
 
-    # 2. Validasi Format Email
     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
         return jsonify({"status": "error", "message": "Format email tidak valid!"}), 400
 
-    # 3. Validasi Kecocokan Password
     if password != konfirmasi_password:
         return jsonify({"status": "error", "message": "Password dan Konfirmasi Password tidak cocok!"}), 400
-    
+
     if len(password) < 6:
         return jsonify({"status": "error", "message": "Password minimal 6 karakter!"}), 400
 
     try:
-        # 4. Cek apakah email sudah terdaftar di database MySQL
-        user_exist = User.query.filter_by(email=email).first()
+        users_col = db[User.COLLECTION]
+
+        user_exist = users_col.find_one({"email": email})
         if user_exist:
-            # Jika user ada tapi belum verifikasi, kita bisa beri pesan khusus (Opsional)
-            if not user_exist.is_verified:
+            if not user_exist.get('is_verified', False):
                 return jsonify({"status": "error", "message": "Email sudah terdaftar tapi belum diverifikasi. Silakan cek email untuk OTP."}), 409
             return jsonify({"status": "error", "message": "Email sudah terdaftar!"}), 409
 
-        # 5. Hash Password demi keamanan
         hashed_password = generate_password_hash(password)
-
-        # 6. Generate 6 Digit OTP
         kode_otp = str(random.randint(100000, 999999))
 
-        # 7. Buat objek User baru (is_verified = False)
-        user_baru = User(
-            nama_lengkap=nama,
-            email=email,
-            password=hashed_password,
-            otp_code=kode_otp,
-            is_verified=False
-        )
-        db.session.add(user_baru)
-        db.session.commit() # Menyimpan permanen ke MySQL
+        user_id = _get_next_counter_seq('users')
+        now_str = _now_ts_str()
 
-        # 8. Proses Kirim Email OTP
+        user_doc = {
+            "id": user_id,
+            "nama_lengkap": nama,
+            "email": email,
+            "password": hashed_password,
+            "role": "siswa",
+            "otp_code": kode_otp,
+            "is_verified": False,
+            "profile_pict": None,
+            "created_at": now_str,
+            "updated_at": now_str,
+        }
+
+        users_col.insert_one(user_doc)
+
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
         msg['To'] = email
         msg['Subject'] = "Kode OTP Edutech Kamu! 🚀"
-        
+
         body = f"""
         Halo {nama}! 👋
-        
+
         Pendaftaran kamu hampir selesai.
         Gunakan 6 digit Kode Rahasia di bawah ini untuk memverifikasi akun kamu:
-        
+
         {kode_otp}
-        
+
         Ayo mulai petualangan belajarmu! Jangan berikan kode ini ke siapapun ya.
         """
         msg.attach(MIMEText(body, 'plain'))
 
-        # Mengirim email menggunakan server Gmail
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
@@ -163,11 +182,10 @@ def register_user():
         return jsonify({
             "status": "success",
             "message": "Hore! Akun berhasil dibuat. Cek email kamu untuk melihat Kode Rahasia!",
-            "email": email # Dikirim balik agar Flutter tahu email siapa yang sedang diverifikasi
+            "email": email
         }), 201
 
     except Exception as e:
-        db.session.rollback() # Batalkan jika ada error database atau gagal kirim email
         return jsonify({"status": "error", "message": f"Gagal memproses pendaftaran: {str(e)}"}), 500
 
 
@@ -181,224 +199,436 @@ def verify_otp():
         return jsonify({"status": "error", "message": "Email dan OTP wajib diisi!"}), 400
 
     try:
-        # Cari user berdasarkan email
-        user = User.query.filter_by(email=email).first()
+        users_col = db[User.COLLECTION]
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
 
-        if not user:
+        if not user_doc:
             return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
 
-        if user.is_verified:
+        if user_doc.get('is_verified', False):
             return jsonify({"status": "error", "message": "Akun ini sudah diverifikasi sebelumnya!"}), 400
 
-        # Cocokkan OTP
-        if user.otp_code == otp_input:
-            user.is_verified = True
-            user.otp_code = None # Hapus OTP karena sudah terpakai
-            db.session.commit()
+        if user_doc.get('otp_code') == otp_input:
+            users_col.update_one(
+                {"_id": user_doc.get("_id")},
+                {"$set": {"is_verified": True, "otp_code": None, "updated_at": _now_ts_str()}},
+            )
             return jsonify({"status": "success", "message": "Yey! Verifikasi berhasil. Silakan Login!"}), 200
-        else:
-            return jsonify({"status": "error", "message": "Kode rahasia salah, coba lagi ya!"}), 400
+
+        return jsonify({"status": "error", "message": "Kode rahasia salah, coba lagi ya!"}), 400
 
     except Exception as e:
-        db.session.rollback()
         return jsonify({"status": "error", "message": f"Gagal memverifikasi: {str(e)}"}), 500
+
 
 @main.route('/api/ujian-menulis-gemini', methods=['POST'])
 def ujian_menulis_gemini():
-    if 'gambar' not in request.files:
-        return jsonify({"status": "error", "message": "File gambar tidak ditemukan!"}), 400
-    
-    file_gambar = request.files['gambar']
-    target_materi = request.form.get('target', 'A').strip()
-    kategori = request.form.get('kategori', 'huruf')
+    import time
+    import logging
+    import concurrent.futures
+
+    print("===== REQUEST =====")
+    print("FORM :", request.form)
+    print("FILES:", request.files)
+    print("===================")
+
+    start_time = time.time()
+    app_logger = logging.getLogger(__name__)
+
+    model_param = (request.form.get('model', 'cnn') or 'cnn').strip().lower()
+    target = (request.form.get('target', 'A') or 'A').upper().strip()
+    kategori = (request.form.get('kategori', 'huruf') or 'huruf').lower().strip()
+    hasil_ocr = (request.form.get('hasil_ocr', '') or '').strip()
+    transkripsi = (request.form.get('transkripsi', '') or '').strip()
+    mode = (request.form.get('mode', 'writing') or 'writing').strip().lower()
+
+    transkripsi = (transkripsi or '').lower().strip()
+    target = (target or '').lower().strip()
+    transkripsi = " ".join(transkripsi.split())
+    target = " ".join(target.split())
+
+    print(f"mode={mode}")
+    print(f"target={target}")
+    print(f"kategori={kategori}")
+    print(f"transkripsi={transkripsi}")
+    print(f"hasil_ocr={hasil_ocr}")
+
+    if mode not in ('writing', 'reading', 'spelling'):
+        return jsonify({"status": "error", "message": "Field mode harus diisi dengan 'writing', 'spelling', atau 'reading'."}), 400
+
+    if model_param not in ('cnn', 'mlkit'):
+        return jsonify({"status": "error", "message": "Parameter model tidak valid. Gunakan 'cnn' atau 'mlkit'."}), 400
+
+    if not target:
+        return jsonify({"status": "error", "message": "Field target wajib diisi."}), 400
+
+    if not kategori:
+        return jsonify({"status": "error", "message": "Field kategori wajib diisi."}), 400
+
+    hasil_cnn = None
+
+    app_logger.info(
+        "[ujian-menulis-gemini] start model=%s mode=%s target=%s kategori=%s",
+        model_param, mode, target, kategori
+    )
+
+    def _extract_status_code(e, default=None):
+        for attr in ("status_code", "code", "status", "http_status"):
+            if hasattr(e, attr):
+                try:
+                    val = getattr(e, attr)
+                    if isinstance(val, int):
+                        return val
+                except Exception:
+                    pass
+
+        s = str(e) if e is not None else ""
+        m = re.search(r"\b(3\d\d)\b", s)
+        if m:
+            try:
+                return int(m.group(1))
+            except Exception:
+                pass
+        return default
+
+    def _handle_gemini_error(e):
+        raw_msg = str(e)
+        exc_type = type(e).__name__
+        status_code = _extract_status_code(e)
+
+        app_logger.error(
+            "[ujian-menulis-gemini] gemini exception type=%s status_code=%s raw_message=%s",
+            exc_type, status_code, raw_msg
+        )
+
+        s = raw_msg.upper()
+
+        is_server_error = ("SERVERERROR" in s) or ("GOOGLE.GENAI.ERRORS.SERVERERROR" in s)
+        is_503_unavailable_high_demand = (
+            (status_code == 503 or "503" in s) and
+            ("UNAVAILABLE" in s) and
+            ("HIGH DEMAND" in s)
+        )
+        if is_server_error or is_503_unavailable_high_demand:
+            return 503, {"status": "error", "message": "AI sedang sibuk karena banyak permintaan. Silakan coba lagi beberapa saat."}
+
+        is_resource_exhausted = ("RESOURCE_EXHAUSTED" in s)
+        is_quota_exceeded = ("QUOTA EXCEEDED" in s) or ("QUOTA" in s and "EXCEEDED" in s)
+        is_429 = (status_code == 429) or ("429" in s)
+        if is_resource_exhausted or is_quota_exceeded or is_429:
+            return 429, {"status": "error", "message": "Kuota API Gemini telah habis. Silakan coba lagi nanti."}
+
+        return 500, {"status": "error", "message": raw_msg}
 
     try:
-        # Konversi gambar biner ke PIL Image
-        img_bytes = file_gambar.read()
-        img = PIL.Image.open(io.BytesIO(img_bytes))
+        if mode == 'writing':
+            if model_param == 'cnn':
+                if 'gambar' in request.files:
+                    file_gambar = request.files['gambar']
+                    ocr_result = predict_image(file_gambar)
+                    hasil_ocr = (ocr_result.get('prediction') or '').strip()
+                    hasil_cnn = {"prediction": ocr_result.get('prediction'), "confidence": ocr_result.get('confidence')}
+                elif hasil_ocr:
+                    hasil_cnn = None
+                else:
+                    return jsonify({"status": "error", "message": "Field image/gambar atau hasil_ocr wajib diisi untuk mode writing."}), 400
+            else:
+                if not hasil_ocr:
+                    return jsonify({"status": "error", "message": "Field hasil_ocr wajib diisi untuk mode writing dengan model='mlkit'."}), 400
 
-        # Rancang Prompt untuk Gemini
-        prompt = f"""
-        Kamu adalah seorang guru Sekolah Dasar (SD) yang sangat ramah, penyabar, dan suportif.
-        Tugasmu adalah memeriksa gambar tulisan tangan anak-anak pada aplikasi edukasi literasi bernama Edutech.
-        
-        Anak ini ditugaskan untuk menulis {kategori}: "{target_materi}".
-        Periksa gambar yang dilampirkan dengan saksama:
-        1. Apakah tulisan tersebut sudah terbaca jelas sebagai "{target_materi}"?
-        2. Berikan skor dari 0 sampai 100.
-        3. Berikan jumlah bintang (0 sampai 3) berdasarkan kualitas tulisan.
-        4. Berikan umpan balik (pesan) motivasi yang singkat, ceria, dan membangun dalam bahasa Indonesia.
+            if not hasil_ocr:
+                return jsonify({"status": "error", "message": "Hasil OCR tidak ditemukan."}), 400
 
-        PENTING: Kamu HANYA boleh merespons dalam format JSON mentah tanpa menggunakan format markdown seperti ```json atau teks tambahan lainnya di luar kurung kurawal. 
+        elif mode in ('spelling', 'reading'):
+            if not transkripsi:
+                return jsonify({"status": "error", "message": f"Field transkripsi wajib diisi untuk mode {mode}."}), 400
+            hasil_ocr = transkripsi
 
-        Struktur JSON harus persis seperti ini:
-        {{
-            "skor": 85,
-            "bintang": 3,
-            "lulus": true,
-            "pesan": "Teks pesan motivasimu di sini"
-        }}
-        """
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_key:
+            return jsonify({"status": "error", "message": "GEMINI_API_KEY tidak ditemukan di environment runtime"}), 500
 
-        # --- PERUBAHAN UNTUK SDK BARU ---
-        # Menggunakan client.models.generate_content dan model gemini-2.5-flash yang super cepat
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[prompt, img]
-        )
-        
-        # --- PERBAIKAN CLEANSING TEKS GEMINI ---
-        clean_text = response.text.strip()
-        
-        # Bersihkan semua kemungkinan tag markdown yang merusak json.loads
+        local_client = genai.Client(api_key=gemini_key)
+
+        if mode == 'writing':
+            prompt = f"""Kamu adalah guru SD yang ramah, sabar, dan penyemangat.
+Tugasmu BUKAN membaca gambar atau melakukan OCR.
+Tugasmu adalah MENGEVALUASI hasil tulisan anak berdasarkan teks yang sudah dikirimkan kepadamu.
+
+Informasi yang kamu terima:
+- Hasil OCR (teks tulisan anak): "{hasil_ocr}"
+- Jawaban yang benar: "{target}"
+- Jenis ujian: "{kategori}" (nilai: 'huruf' atau 'kata')
+
+Langkah 1 — Tentukan status:
+- Bandingkan hasil tulisan dengan jawaban benar (abaikan huruf besar/kecil).
+- Jika sama → status = "benar"
+- Jika berbeda → status = "salah"
+
+Langkah 2 — Buat feedback:
+- Jika status = "salah": jelaskan letak kesalahannya secara sederhana, sebutkan huruf/kata yang salah dan yang seharusnya, lalu beri semangat untuk mencoba lagi.
+  Jika jenis ujian = 'kata' dan ada huruf yang kurang baik, sebutkan huruf tersebut.
+- Jika status = "benar": beri pujian yang hangat.
+  Jika tulisan masih kurang rapi, berikan saran yang lembut agar makin baik.
+
+Jawab HANYA dalam format JSON berikut:
+{{
+  "status": "benar" atau "salah",
+  "feedback": "kalimat evaluasi singkat",
+  "tts": "kalimat yang akan dibacakan"
+}}"""
+
+        elif mode == 'reading':
+            prompt = f"""Kamu adalah guru SD yang ramah, sabar, dan penyemangat.
+Tugasmu adalah MENGEVALUASI kemampuan membaca anak berdasarkan teks yang sudah dikirimkan kepadamu.
+
+Informasi yang kamu terima:
+- Teks hasil baca anak: "{hasil_ocr}"
+- Jawaban yang benar: "{target}"
+- Jenis ujian: "{kategori}" (nilai: 'huruf' atau 'kata')
+
+Langkah 1 — Tentukan status:
+- Bandingkan teks hasil baca dengan jawaban benar (abaikan huruf besar/kecil).
+- Jika sama → status = "benar"
+- Jika berbeda → status = "salah"
+
+Jawab HANYA dalam format JSON berikut:
+{{
+  "status": "benar" atau "salah",
+  "feedback": "kalimat evaluasi singkat",
+  "tts": "kalimat yang akan dibacakan"
+}}"""
+
+        else:
+            prompt = f"""Kamu adalah guru terapi wicara dan guru membaca anak usia 4–8 tahun.
+Tugasmu menilai pelafalan suara anak berdasarkan transkripsi hasil STT.
+
+Target: "{target}"
+Transkripsi: "{hasil_ocr}"
+
+Jawab HANYA dalam format JSON berikut:
+{{
+  "status": "benar" atau "salah",
+  "feedback": "kalimat evaluasi singkat",
+  "tts": "kalimat yang akan dibacakan"
+}}"""
+
+        def call_gemini():
+            return local_client.models.generate_content(model='gemini-2.5-flash', contents=[prompt])
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(call_gemini)
+            response = future.result(timeout=25)
+
+        clean_text = (response.text or '').strip()
         if "```json" in clean_text:
             clean_text = clean_text.split("```json")[1].split("```")[0].strip()
         elif "```" in clean_text:
             clean_text = clean_text.split("```")[1].strip()
-            
-        # Cari kurung kurawal pertama dan terakhir untuk memastikan hanya mengambil objek JSON
+
         start_idx = clean_text.find("{")
         end_idx = clean_text.rfind("}") + 1
-        if start_idx != -1 and end_idx != -1:
+        if start_idx != -1 and end_idx > start_idx:
             clean_text = clean_text[start_idx:end_idx]
 
         hasil_json = json.loads(clean_text)
-        return jsonify({
-            "status": "success",
-            "hasil_analisis": hasil_json
-        }), 200
+        status_eval = hasil_json.get('status', 'salah')
+        feedback = hasil_json.get('feedback', '')
+        tts = hasil_json.get('tts', '')
+        result = "correct" if status_eval == "benar" else "incorrect"
+
+        return jsonify({"status": "success", "result": result, "feedback": feedback, "tts": tts}), 200
+
+    except concurrent.futures.TimeoutError:
+        return jsonify({"status": "error", "message": "Proses evaluasi memakan waktu terlalu lama. Coba lagi ya."}), 504
 
     except json.JSONDecodeError:
-        return jsonify({
-            "status": "error", 
-            "message": "Gemini gagal mengembalikan format data yang sesuai.",
-            "raw_response": response.text
-        }), 500
+        return jsonify({"status": "error", "message": "Gemini gagal mengembalikan format data yang sesuai."}), 500
+
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Terjadi kesalahan pada server: {str(e)}"}), 500
+        http_status, response_json = _handle_gemini_error(e)
+        return jsonify(response_json), http_status
 
 
 @main.route('/api/sync-progress', methods=['POST'])
 def sync_progress():
-    from app.models import User, UserProgress # Import UserProgress
     data = request.get_json()
     email = data.get('email')
-    
+
     if not email:
         return jsonify({"status": "error", "message": "Email diperlukan untuk sinkronisasi"}), 400
 
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        return jsonify({"status": "error", "message": "User tidak ditemukan"}), 404
-
     try:
-        # Buat progress record jika belum ada
-        if not user.progress:
-            progress = UserProgress(user_id=user.id)
-            db.session.add(progress)
-            db.session.commit()
-            
-        progress = user.progress
+        users_col = db[User.COLLECTION]
+        progress_col = db[UserProgress.COLLECTION]
 
-        # Update fields jika ada di payload JSON
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
+
+        if not user_doc:
+            return jsonify({"status": "error", "message": "User tidak ditemukan"}), 404
+
+        user_id = user_doc.get('id')
+
+        progress_doc = progress_col.find_one({"user_id": user_id})
+        if not progress_doc:
+            new_id = _get_next_counter_seq('user_progress')
+            base = {
+                "id": new_id,
+                "user_id": user_id,
+                "total_points": 0,
+                "streak_days": 0,
+                "last_login_date": None,
+                "completed_items": json.dumps([]),
+                "unlocked_writing_letter": 0,
+                "unlocked_writing_lowercase": 0,
+                "unlocked_writing_word": 0,
+                "unlocked_spelling_letter": 0,
+                "unlocked_spelling_word": 0,
+                "current_mission_index": 0,
+                "completed_missions": json.dumps([]),
+            }
+            progress_col.insert_one(base)
+            progress_doc = base
+
+        update_fields = {}
         if 'total_points' in data:
-            progress.total_points = data['total_points']
+            update_fields['total_points'] = data['total_points']
         if 'streak_days' in data:
-            progress.streak_days = data['streak_days']
+            update_fields['streak_days'] = data['streak_days']
         if 'last_login_date' in data:
-            progress.last_login_date = data['last_login_date']
+            update_fields['last_login_date'] = data['last_login_date']
         if 'completed_items' in data:
-            import json
-            progress.completed_items = json.dumps(data['completed_items'])
-        
-        if 'unlocked_writing_letter' in data:
-            progress.unlocked_writing_letter = data['unlocked_writing_letter']
-        if 'unlocked_writing_lowercase' in data:
-            progress.unlocked_writing_lowercase = data['unlocked_writing_lowercase']
-        if 'unlocked_writing_word' in data:
-            progress.unlocked_writing_word = data['unlocked_writing_word']
-        if 'unlocked_spelling_letter' in data:
-            progress.unlocked_spelling_letter = data['unlocked_spelling_letter']
-        if 'unlocked_spelling_word' in data:
-            progress.unlocked_spelling_word = data['unlocked_spelling_word']
-            
-        if 'current_mission_index' in data:
-            progress.current_mission_index = data['current_mission_index']
-        if 'completed_missions' in data:
-            import json
-            progress.completed_missions = json.dumps(data['completed_missions'])
+            update_fields['completed_items'] = json.dumps(data['completed_items'])
 
-        db.session.commit()
-        
+        if 'unlocked_writing_letter' in data:
+            update_fields['unlocked_writing_letter'] = data['unlocked_writing_letter']
+        if 'unlocked_writing_lowercase' in data:
+            update_fields['unlocked_writing_lowercase'] = data['unlocked_writing_lowercase']
+        if 'unlocked_writing_word' in data:
+            update_fields['unlocked_writing_word'] = data['unlocked_writing_word']
+        if 'unlocked_spelling_letter' in data:
+            update_fields['unlocked_spelling_letter'] = data['unlocked_spelling_letter']
+        if 'unlocked_spelling_word' in data:
+            update_fields['unlocked_spelling_word'] = data['unlocked_spelling_word']
+
+        if 'current_mission_index' in data:
+            update_fields['current_mission_index'] = data['current_mission_index']
+        if 'completed_missions' in data:
+            update_fields['completed_missions'] = json.dumps(data['completed_missions'])
+
+        if update_fields:
+            progress_col.update_one({"user_id": user_id}, {"$set": update_fields})
+
+        progress_doc = progress_col.find_one({"user_id": user_id})
+
         return jsonify({
             "status": "success",
             "message": "Progress berhasil disinkronkan ke server",
-            "progress": progress.to_dict()
+            "progress": UserProgress.to_dict(progress_doc)
         }), 200
 
     except Exception as e:
-        db.session.rollback()
         return jsonify({"status": "error", "message": f"Gagal sinkronisasi: {str(e)}"}), 500
+
 
 @main.route('/api/get-progress', methods=['GET'])
 def get_progress():
-    from app.models import User, UserProgress # Import UserProgress
     email = request.args.get('email')
-    
+
     if not email:
         return jsonify({"status": "error", "message": "Email diperlukan"}), 400
 
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        return jsonify({"status": "error", "message": "User tidak ditemukan"}), 404
-        
-    if not user.progress:
-        # Jika belum ada progress, buatkan baru dengan nilai default 0
-        progress = UserProgress(user_id=user.id)
-        db.session.add(progress)
-        db.session.commit()
-
-    return jsonify({
-        "status": "success",
-        "progress": user.progress.to_dict()
-    }), 200
-
-@main.route('/api/leaderboard', methods=['GET'])
-def get_leaderboard():
-    from app.models import User, UserProgress
     try:
-        # Join User and UserProgress, order by total_points DESC
-        leaderboard_data = db.session.query(User, UserProgress).join(
-            UserProgress, User.id == UserProgress.user_id
-        ).order_by(UserProgress.total_points.desc()).all()
+        users_col = db[User.COLLECTION]
+        progress_col = db[UserProgress.COLLECTION]
 
-        results = []
-        for rank, (user, progress) in enumerate(leaderboard_data, start=1):
-            emoji = user.profile_pict if user.profile_pict else "🧒"
-            
-            # Format skor agar ada titik ribuan (misal 1500 -> 1.500)
-            score_formatted = f"{progress.total_points:,}".replace(',', '.')
-            
-            results.append({
-                "rank": rank,
-                "name": user.nama_lengkap,
-                "score": score_formatted,
-                "emoji": emoji,
-                "email": user.email,
-                "active": False # Akan diset di frontend
-            })
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
+
+        if not user_doc:
+            return jsonify({"status": "error", "message": "User tidak ditemukan"}), 404
+
+        user_id = user_doc.get('id')
+        progress_doc = progress_col.find_one({"user_id": user_id})
+
+        if not progress_doc:
+            new_id = _get_next_counter_seq('user_progress')
+            base = {
+                "id": new_id,
+                "user_id": user_id,
+                "total_points": 0,
+                "streak_days": 0,
+                "last_login_date": None,
+                "completed_items": json.dumps([]),
+                "unlocked_writing_letter": 0,
+                "unlocked_writing_lowercase": 0,
+                "unlocked_writing_word": 0,
+                "unlocked_spelling_letter": 0,
+                "unlocked_spelling_word": 0,
+                "current_mission_index": 0,
+                "completed_missions": json.dumps([]),
+            }
+            progress_col.insert_one(base)
+            progress_doc = base
 
         return jsonify({
             "status": "success",
-            "leaderboard": results
+            "progress": UserProgress.to_dict(progress_doc)
         }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal mengambil progress: {str(e)}"}), 500
+
+
+@main.route('/api/leaderboard', methods=['GET'])
+def get_leaderboard():
+    try:
+        users_col = db[User.COLLECTION]
+        progress_col = db[UserProgress.COLLECTION]
+
+        pipeline = [
+            {"$sort": {"total_points": -1}},
+            {"$lookup": {
+                "from": users_col.name,
+                "localField": "user_id",
+                "foreignField": "id",
+                "as": "user"
+            }},
+            {"$unwind": "$user"},
+            {"$project": {
+                "_id": 0,
+                "user_id": 1,
+                "total_points": 1,
+                "name": "$user.nama_lengkap",
+                "email": "$user.email",
+                "emoji": {"$ifNull": ["$user.profile_pict", "🧒"]}
+            }}
+        ]
+
+        rows = list(progress_col.aggregate(pipeline))
+
+        results = []
+        for rank, row in enumerate(rows, start=1):
+            score_formatted = f"{int(row.get('total_points') or 0):,}".replace(',', '.')
+            results.append({
+                "rank": rank,
+                "name": row.get('name'),
+                "score": score_formatted,
+                "emoji": row.get('emoji') if row.get('emoji') else '🧒',
+                "email": row.get('email'),
+                "active": False
+            })
+
+        return jsonify({"status": "success", "leaderboard": results}), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Gagal mengambil leaderboard: {str(e)}"}), 500
 
+
 @main.route('/api/activity/log', methods=['POST'])
 def add_activity_log():
-    from app.models import User, ActivityLog
     data = request.get_json()
     email = data.get('email')
     action = data.get('action')
@@ -409,32 +639,40 @@ def add_activity_log():
         return jsonify({"status": "error", "message": "Email dan action wajib diisi!"}), 400
 
     try:
-        user = User.query.filter_by(email=email).first()
-        if not user:
+        users_col = db[User.COLLECTION]
+        logs_col = db[ActivityLog.COLLECTION]
+
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
+
+        if not user_doc:
             return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
 
-        new_log = ActivityLog(
-            user_id=user.id,
-            action=action,
-            description=description,
-            points_earned=points
-        )
-        db.session.add(new_log)
-        db.session.commit()
+        new_log_id = _get_next_counter_seq('activity_logs')
+
+        doc = {
+            "id": new_log_id,
+            "user_id": user_doc.get("id"),
+            "action": action,
+            "description": description,
+            "points_earned": points,
+            "timestamp": _now_ts_str(),
+        }
+
+        logs_col.insert_one(doc)
 
         return jsonify({
             "status": "success",
             "message": "Log aktivitas berhasil disimpan",
-            "log": new_log.to_dict()
+            "log": ActivityLog.to_dict(doc)
         }), 201
 
     except Exception as e:
-        db.session.rollback()
         return jsonify({"status": "error", "message": f"Gagal menyimpan log: {str(e)}"}), 500
+
 
 @main.route('/api/activity/logs', methods=['POST'])
 def get_activity_logs():
-    from app.models import User, ActivityLog
     data = request.get_json()
     email = data.get('email')
 
@@ -442,23 +680,30 @@ def get_activity_logs():
         return jsonify({"status": "error", "message": "Email wajib diisi!"}), 400
 
     try:
-        user = User.query.filter_by(email=email).first()
-        if not user:
+        users_col = db[User.COLLECTION]
+        logs_col = db[ActivityLog.COLLECTION]
+
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
+
+        if not user_doc:
             return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
 
-        logs = ActivityLog.query.filter_by(user_id=user.id).order_by(ActivityLog.timestamp.desc()).limit(50).all()
-        
-        return jsonify({
-            "status": "success",
-            "logs": [log.to_dict() for log in logs]
-        }), 200
+        cursor = logs_col.find({"user_id": user_doc.get('id')}).sort('timestamp', -1).limit(50)
+        logs = list(cursor)
+
+        logs_formatted = []
+        for doc in logs:
+            logs_formatted.append(ActivityLog.to_dict(doc))
+
+        return jsonify({"status": "success", "logs": logs_formatted}), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Gagal mengambil logs: {str(e)}"}), 500
 
+
 @main.route('/api/update-profile', methods=['POST'])
 def update_profile():
-    from app.models import User
     data = request.get_json()
     email = data.get('email')
     nama_lengkap = data.get('nama_lengkap')
@@ -468,20 +713,30 @@ def update_profile():
         return jsonify({"status": "error", "message": "Email wajib diisi!"}), 400
 
     try:
-        user = User.query.filter_by(email=email).first()
-        if not user:
+        users_col = db[User.COLLECTION]
+
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
+
+        if not user_doc:
             return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
 
+        update_fields = {}
         if nama_lengkap:
-            user.nama_lengkap = nama_lengkap
+            update_fields['nama_lengkap'] = nama_lengkap
         if profile_pict:
-            user.profile_pict = profile_pict
+            update_fields['profile_pict'] = profile_pict
 
-        db.session.commit()
+        if update_fields:
+            update_fields['updated_at'] = _now_ts_str()
+            users_col.update_one({"_id": user_doc.get("_id")}, {"$set": update_fields})
+            user_doc = users_col.find_one({"_id": user_doc.get("_id")})
+            user_doc = _ensure_defaults_user_doc(user_doc)
+
         return jsonify({
             "status": "success",
             "message": "Profil berhasil diperbarui",
-            "user": user.to_dict()
+            "user": User.to_dict(user_doc)
         }), 200
 
     except Exception as e:
@@ -616,3 +871,138 @@ def get_raport():
     except Exception as e:
         print(f"Error saat mengambil raport: {e}")
         return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "error", "message": f"Gagal memperbarui profil: {str(e)}"}), 500
+
+
+@main.route('/api/predict', methods=['POST'])
+def predict_handwriting():
+    if 'gambar' not in request.files:
+        return jsonify({"status": "error", "message": "File gambar tidak ditemukan"}), 400
+
+    try:
+        file = request.files['gambar']
+        result = predict_image(file)
+
+        return jsonify({
+            "status": "success",
+            "prediction": result["prediction"],
+            "confidence": result["confidence"]
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SESSION TRACKING — Endpoints baru untuk melacak durasi penggunaan aplikasi
+#  Digunakan oleh Admin Dashboard. Tidak mempengaruhi fitur Flutter yang lain.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.route('/api/session/start', methods=['POST'])
+def session_start():
+    """
+    Mencatat awal sesi penggunaan aplikasi.
+    Dipanggil Flutter saat aplikasi dibuka / user login.
+
+    Body JSON:
+        email (str): Email pengguna
+        device_info (str, optional): Info perangkat
+    """
+    data = request.get_json() or {}
+    email = data.get('email', '').strip()
+
+    if not email:
+        return jsonify({"status": "error", "message": "Email wajib diisi!"}), 400
+
+    try:
+        from app.models import AppSession
+        users_col = db[User.COLLECTION]
+        sessions_col = db[AppSession.COLLECTION]
+
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
+
+        if not user_doc:
+            return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
+
+        session_id = _get_next_counter_seq('app_sessions')
+        now_str = _now_ts_str()
+
+        session_doc = {
+            "id": session_id,
+            "user_id": user_doc.get("id"),
+            "session_start": now_str,
+            "session_end": None,
+            "duration_seconds": None,
+            "device_info": data.get("device_info", ""),
+        }
+
+        sessions_col.insert_one(session_doc)
+
+        return jsonify({
+            "status": "success",
+            "message": "Sesi dimulai",
+            "session_id": session_id,
+        }), 201
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal memulai sesi: {str(e)}"}), 500
+
+
+@main.route('/api/session/end', methods=['POST'])
+def session_end():
+    """
+    Mencatat akhir sesi dan menghitung durasi penggunaan.
+    Dipanggil Flutter saat aplikasi ditutup / user logout.
+
+    Body JSON:
+        session_id (int): ID sesi dari /api/session/start
+        email (str): Email pengguna (sebagai validasi)
+    """
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    email = data.get('email', '').strip()
+
+    if not session_id:
+        return jsonify({"status": "error", "message": "session_id wajib diisi!"}), 400
+
+    try:
+        from app.models import AppSession
+
+        sessions_col = db[AppSession.COLLECTION]
+        session_doc = sessions_col.find_one({"id": session_id})
+
+        if not session_doc:
+            return jsonify({"status": "error", "message": "Sesi tidak ditemukan!"}), 404
+
+        if session_doc.get("session_end") is not None:
+            return jsonify({"status": "error", "message": "Sesi sudah diakhiri sebelumnya!"}), 400
+
+        now_str = _now_ts_str()
+
+        # Hitung durasi
+        start_str = session_doc.get("session_start", "")
+        duration_seconds = None
+        try:
+            start_dt = datetime.datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.datetime.strptime(now_str, "%Y-%m-%d %H:%M:%S")
+            duration_seconds = int((end_dt - start_dt).total_seconds())
+        except Exception:
+            pass
+
+        sessions_col.update_one(
+            {"id": session_id},
+            {"$set": {
+                "session_end": now_str,
+                "duration_seconds": duration_seconds,
+            }}
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Sesi diakhiri",
+            "duration_seconds": duration_seconds,
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal mengakhiri sesi: {str(e)}"}), 500
