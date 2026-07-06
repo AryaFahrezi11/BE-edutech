@@ -76,3 +76,40 @@ class ActivityLog:
             "timestamp": _fmt_dt(doc.get("timestamp")),
         }
 
+
+class AppSession:
+    """
+    Menyimpan data sesi penggunaan aplikasi per pengguna.
+    Diisi oleh endpoint /api/session/start dan /api/session/end.
+    Digunakan oleh Admin Dashboard untuk menghitung rata-rata durasi penggunaan.
+    """
+
+    COLLECTION = "app_sessions"
+
+    @staticmethod
+    def to_dict(doc: dict):
+        return {
+            "id": doc.get("id"),
+            "user_id": doc.get("user_id"),
+            "session_start": _fmt_dt(doc.get("session_start")),
+            "session_end": _fmt_dt(doc.get("session_end")),
+            "duration_seconds": doc.get("duration_seconds"),
+            "device_info": doc.get("device_info"),
+        }
+
+
+class Admin:
+    """
+    Akun admin untuk dashboard (terpisah dari user Flutter).
+    Password di-hash dengan bcrypt.
+    """
+
+    COLLECTION = "admins"
+
+    @staticmethod
+    def to_dict(doc: dict):
+        return {
+            "username": doc.get("username"),
+            "role": doc.get("role", "admin"),
+            "created_at": _fmt_dt(doc.get("created_at")),
+        }

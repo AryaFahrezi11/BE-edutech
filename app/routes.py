@@ -754,3 +754,117 @@ def predict_handwriting():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SESSION TRACKING — Endpoints baru untuk melacak durasi penggunaan aplikasi
+#  Digunakan oleh Admin Dashboard. Tidak mempengaruhi fitur Flutter yang lain.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.route('/api/session/start', methods=['POST'])
+def session_start():
+    """
+    Mencatat awal sesi penggunaan aplikasi.
+    Dipanggil Flutter saat aplikasi dibuka / user login.
+
+    Body JSON:
+        email (str): Email pengguna
+        device_info (str, optional): Info perangkat
+    """
+    data = request.get_json() or {}
+    email = data.get('email', '').strip()
+
+    if not email:
+        return jsonify({"status": "error", "message": "Email wajib diisi!"}), 400
+
+    try:
+        from app.models import AppSession
+        users_col = db[User.COLLECTION]
+        sessions_col = db[AppSession.COLLECTION]
+
+        user_doc = users_col.find_one({"email": email})
+        user_doc = _ensure_defaults_user_doc(user_doc)
+
+        if not user_doc:
+            return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
+
+        session_id = _get_next_counter_seq('app_sessions')
+        now_str = _now_ts_str()
+
+        session_doc = {
+            "id": session_id,
+            "user_id": user_doc.get("id"),
+            "session_start": now_str,
+            "session_end": None,
+            "duration_seconds": None,
+            "device_info": data.get("device_info", ""),
+        }
+
+        sessions_col.insert_one(session_doc)
+
+        return jsonify({
+            "status": "success",
+            "message": "Sesi dimulai",
+            "session_id": session_id,
+        }), 201
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal memulai sesi: {str(e)}"}), 500
+
+
+@main.route('/api/session/end', methods=['POST'])
+def session_end():
+    """
+    Mencatat akhir sesi dan menghitung durasi penggunaan.
+    Dipanggil Flutter saat aplikasi ditutup / user logout.
+
+    Body JSON:
+        session_id (int): ID sesi dari /api/session/start
+        email (str): Email pengguna (sebagai validasi)
+    """
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    email = data.get('email', '').strip()
+
+    if not session_id:
+        return jsonify({"status": "error", "message": "session_id wajib diisi!"}), 400
+
+    try:
+        from app.models import AppSession
+
+        sessions_col = db[AppSession.COLLECTION]
+        session_doc = sessions_col.find_one({"id": session_id})
+
+        if not session_doc:
+            return jsonify({"status": "error", "message": "Sesi tidak ditemukan!"}), 404
+
+        if session_doc.get("session_end") is not None:
+            return jsonify({"status": "error", "message": "Sesi sudah diakhiri sebelumnya!"}), 400
+
+        now_str = _now_ts_str()
+
+        # Hitung durasi
+        start_str = session_doc.get("session_start", "")
+        duration_seconds = None
+        try:
+            start_dt = datetime.datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+            end_dt = datetime.datetime.strptime(now_str, "%Y-%m-%d %H:%M:%S")
+            duration_seconds = int((end_dt - start_dt).total_seconds())
+        except Exception:
+            pass
+
+        sessions_col.update_one(
+            {"id": session_id},
+            {"$set": {
+                "session_end": now_str,
+                "duration_seconds": duration_seconds,
+            }}
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Sesi diakhiri",
+            "duration_seconds": duration_seconds,
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal mengakhiri sesi: {str(e)}"}), 500
