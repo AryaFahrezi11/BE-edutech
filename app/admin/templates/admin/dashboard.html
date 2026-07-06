@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard — EduTech</title>
+  <meta name="description" content="Admin dashboard EduTech — statistik real-time, analisis kompetitor, dan rekomendasi AI" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #070b17;
+      --bg-2: #0d1221;
+      --surface: rgba(255,255,255,0.04);
+      --surface-hover: rgba(255,255,255,0.07);
+      --border: rgba(255,255,255,0.08);
+      --purple: #7c3aed;
+      --purple-dim: rgba(124,58,237,0.15);
+      --blue: #3b82f6;
+      --blue-dim: rgba(59,130,246,0.15);
+      --green: #10b981;
+      --green-dim: rgba(16,185,129,0.15);
+      --amber: #f59e0b;
+      --amber-dim: rgba(245,158,11,0.15);
+      --red: #ef4444;
+      --red-dim: rgba(239,68,68,0.12);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-dim: #475569;
+      --sidebar-w: 256px;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+
+    /* ──────────── SCROLLBAR ──────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    /* ──────────── SIDEBAR ──────────── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: linear-gradient(180deg, #111827 0%, #0d1221 100%);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      padding: 28px 24px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo-icon-wrap {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.35);
+    }
+    .logo-text { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .logo-badge {
+      font-size: 10px; font-weight: 600;
+      color: var(--purple-light, #a78bfa);
+      background: rgba(124,58,237,0.15);
+      padding: 2px 7px; border-radius: 99px;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .nav-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding: 12px 12px 6px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      border: 1px solid transparent;
+    }
+    .nav-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .nav-item.active {
+      background: rgba(124,58,237,0.15);
+      color: #a78bfa;
+      border-color: rgba(124,58,237,0.25);
+    }
+    .nav-icon { font-size: 18px; width: 22px; text-align: center; }
+
+    .sidebar-footer {
+      padding: 16px 16px 20px;
+      border-top: 1px solid var(--border);
+    }
+    .admin-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      margin-bottom: 10px;
+    }
+    .admin-avatar {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .admin-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .admin-role { font-size: 11px; color: var(--text-secondary); }
+    .logout-btn {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; padding: 10px 12px;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: var(--radius-sm);
+      color: #fca5a5;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .logout-btn:hover { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.35); }
+
+    /* ──────────── MAIN CONTENT ──────────── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 0;
+      min-width: 0;
+    }
+
+    /* Top header bar */
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(7,11,23,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .topbar-title { font-size: 18px; font-weight: 700; }
+    .topbar-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+    .refresh-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .refresh-btn:hover { background: var(--surface-hover); color: var(--text-primary); border-color: rgba(255,255,255,0.15); }
+    .last-updated { font-size: 12px; color: var(--text-dim); }
+    .status-dot {
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ──────────── PAGE CONTENT ──────────── */
+    .page-content { padding: 32px; }
+
+    /* ──────────── STAT CARDS ──────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex; flex-direction: column;
+      gap: 16px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+    }
+    .stat-card.purple::before { background: linear-gradient(90deg, var(--purple), var(--blue)); }
+    .stat-card.blue::before   { background: linear-gradient(90deg, var(--blue), var(--green)); }
+    .stat-card.green::before  { background: linear-gradient(90deg, var(--green), var(--amber)); }
+    .stat-card.amber::before  { background: linear-gradient(90deg, var(--amber), var(--red)); }
+    .stat-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+      border-color: rgba(255,255,255,0.14);
+    }
+    .stat-header { display: flex; align-items: center; justify-content: space-between; }
+    .stat-icon {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    .stat-icon.purple { background: var(--purple-dim); }
+    .stat-icon.blue   { background: var(--blue-dim); }
+    .stat-icon.green  { background: var(--green-dim); }
+    .stat-icon.amber  { background: var(--amber-dim); }
+    .stat-badge {
+      font-size: 11px; font-weight: 600;
+      padding: 3px 8px; border-radius: 99px;
+    }
+    .stat-badge.positive { background: var(--green-dim); color: var(--green); }
+    .stat-badge.neutral  { background: var(--blue-dim); color: var(--blue); }
+    .stat-value {
+      font-size: 32px; font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    .stat-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; margin-top: 4px; }
+    .stat-desc { font-size: 12px; color: var(--text-dim); }
+
+    .stat-loading .stat-value {
+      background: rgba(255,255,255,0.08);
+      color: transparent;
+      border-radius: 8px;
+      width: 80px; height: 36px;
+      animation: shimmer 1.5s ease infinite;
+    }
+    @keyframes shimmer {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ──────────── CHARTS ──────────── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .chart-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .chart-title { font-size: 15px; font-weight: 600; }
+    .chart-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+    .chart-badge {
+      font-size: 11px; font-weight: 600;
+      padding: 4px 10px; border-radius: 99px;
+      background: var(--purple-dim);
+      color: #a78bfa;
+    }
+    .chart-container { position: relative; height: 220px; }
+
+    /* Trend chart (full width) */
+    .trend-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .trend-chart-container { position: relative; height: 160px; }
+
+    /* ──────────── SECTION HEADERS ──────────── */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .section-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(255,255,255,0.02);
+    }
+    .section-title { font-size: 15px; font-weight: 600; }
+    .section-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+    .section-body { padding: 24px; }
+
+    /* ──────────── TABLE ──────────── */
+    .table-controls {
+      display: flex; gap: 12px; margin-bottom: 16px;
+      align-items: center;
+    }
+    .search-input {
+      flex: 1;
+      padding: 10px 14px 10px 38px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
+    .search-wrapper { position: relative; flex: 1; }
+    .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--text-dim); pointer-events: none; }
+    .search-input:focus { border-color: var(--purple); box-shadow: 0 0 0 2px rgba(124,58,237,0.12); }
+    .search-input::placeholder { color: var(--text-dim); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.12s;
+    }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody tr:last-child { border-bottom: none; }
+    td {
+      padding: 12px 14px;
+      vertical-align: middle;
+    }
+    .user-cell { display: flex; align-items: center; gap: 10px; }
+    .user-avatar {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .user-name { font-weight: 500; color: var(--text-primary); }
+    .user-email { font-size: 12px; color: var(--text-secondary); }
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 8px; border-radius: 99px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-verified { background: var(--green-dim); color: var(--green); }
+    .badge-unverified { background: rgba(255,255,255,0.07); color: var(--text-dim); }
+    .badge-points { background: var(--amber-dim); color: var(--amber); }
+    .badge-streak { background: var(--purple-dim); color: #a78bfa; }
+
+    .points-bar-wrap { min-width: 80px; }
+    .points-bar {
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .points-bar-fill { height: 100%; background: linear-gradient(90deg, var(--purple), var(--blue)); border-radius: 2px; }
+
+    .table-footer {
+      padding: 14px 24px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    .pagination { display: flex; gap: 4px; }
+    .page-btn {
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 12px; font-weight: 500;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .page-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .page-btn.active { background: var(--purple-dim); border-color: var(--purple); color: #a78bfa; }
+
+    /* ──────────── RECENT LOGS ──────────── */
+    .log-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .log-item:last-child { border-bottom: none; }
+    .log-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--purple);
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .log-action { font-size: 13px; font-weight: 500; }
+    .log-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .log-time { font-size: 11px; color: var(--text-dim); margin-left: auto; flex-shrink: 0; padding-top: 3px; }
+
+    /* ──────────── COMPETITOR SECTION ──────────── */
+    .apps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .app-checkbox-label {
+      position: relative;
+      cursor: pointer;
+      display: block;
+    }
+    .app-checkbox-label input[type=checkbox] { position: absolute; opacity: 0; width: 0; height: 0; }
+    .app-checkbox-card {
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      display: flex; align-items: center; gap: 10px;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .app-checkbox-label input:checked + .app-checkbox-card {
+      background: var(--purple-dim);
+      border-color: var(--purple);
+    }
+    .app-checkbox-icon { font-size: 22px; }
+    .app-checkbox-name { font-size: 13px; font-weight: 500; }
+
+    /* Action buttons */
+    .action-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+      border: none; border-radius: 10px;
+      color: white; font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(124,58,237,0.4); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-secondary); font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-secondary:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Spinner inside button */
+    .btn-spin {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scraping results */
+    .scrape-results {
+      display: none;
+      gap: 16px;
+      flex-direction: column;
+    }
+    .app-reviews-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .app-reviews-header {
+      padding: 14px 18px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .app-reviews-title { font-size: 14px; font-weight: 600; }
+    .app-reviews-count { font-size: 12px; color: var(--text-secondary); }
+    .reviews-list { padding: 4px 0; max-height: 280px; overflow-y: auto; }
+    .review-item {
+      padding: 12px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .review-item:last-child { border-bottom: none; }
+    .review-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .review-user { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+    .review-stars { font-size: 11px; }
+    .review-content { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+    .star-low  { color: var(--red); }
+    .star-mid  { color: var(--amber); }
+    .star-high { color: var(--green); }
+
+    /* AI Analysis */
+    .ai-analysis-box {
+      display: none;
+      background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(59,130,246,0.06));
+      border: 1px solid rgba(124,58,237,0.2);
+      border-radius: 14px;
+      padding: 24px;
+      margin-top: 16px;
+    }
+    .ai-analysis-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .ai-badge {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 99px;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+      font-size: 12px; font-weight: 600; color: white;
+    }
+    .ai-timestamp { font-size: 12px; color: var(--text-dim); margin-left: auto; }
+    .ai-content {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ai-content h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 20px 0 10px;
+    }
+    .ai-content h2:first-child { margin-top: 0; }
+    .ai-content ul, .ai-content ol { padding-left: 20px; margin: 8px 0; }
+    .ai-content li { margin-bottom: 6px; }
+    .ai-content strong { color: var(--text-primary); font-weight: 600; }
+
+    /* Loading overlay */
+    .loading-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(7,11,23,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 999;
+      align-items: center; justify-content: center;
+      flex-direction: column; gap: 16px;
+    }
+    .loading-overlay.show { display: flex; }
+    .loading-spinner {
+      width: 50px; height: 50px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: var(--purple);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .loading-text { color: var(--text-secondary); font-size: 14px; }
+
+    /* Toast notifications */
+    .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      animation: toastIn 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    .toast.success { border-color: rgba(16,185,129,0.3); }
+    .toast.error   { border-color: rgba(239,68,68,0.3); }
+    @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center; padding: 48px 24px;
+      color: var(--text-secondary);
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+    .empty-text { font-size: 14px; }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      :root { --sidebar-w: 0px; }
+      .sidebar { display: none; }
+      .main { margin-left: 0; }
+      .page-content { padding: 16px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ──────────── SIDEBAR ──────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon-wrap">🎓</div>
+    <div>
+      <div class="logo-text">EduTech</div>
+      <div class="logo-badge">ADMIN</div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-title">Menu Utama</div>
+    <a href="#overview" class="nav-item active" onclick="setActiveNav(this)">
+      <span class="nav-icon">📊</span>
+      <span>Overview</span>
+    </a>
+    <a href="#activity" class="nav-item" onclick="setActiveNav(this)">
+      <span class="nav-icon">📈</span>
+      <span>Aktivitas</span>
+    </a>
+    <a href="#users" class="nav-item" onclick="setActiveNav(this)">
+      <span class="nav-icon">👥</span>
+      <span>Pengguna</span>
+    </a>
+
+    <div class="nav-section-title" style="margin-top:8px;">Analitik</div>
+    <a href="#recent-logs" class="nav-item" onclick="setActiveNav(this)">
+      <span class="nav-icon">📋</span>
+      <span>Log Terbaru</span>
+    </a>
+    <a href="#competitor" class="nav-item" onclick="setActiveNav(this)">
+      <span class="nav-icon">🔍</span>
+      <span>Kompetitor</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="admin-card">
+      <div class="admin-avatar">👤</div>
+      <div>
+        <div class="admin-name">{{ admin_username }}</div>
+        <div class="admin-role">Super Admin</div>
+      </div>
+    </div>
+    <a href="/admin/logout" class="logout-btn">
+      <span>🚪</span>
+      <span>Keluar</span>
+    </a>
+  </div>
+</aside>
+
+<!-- ──────────── MAIN ──────────── -->
+<main class="main">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">Dashboard <span class="status-dot" style="margin-left:6px;"></span></div>
+      <div class="topbar-subtitle">Data real-time dari MongoDB EduTech</div>
+    </div>
+    <div class="topbar-actions">
+      <span class="last-updated" id="lastUpdated">Memuat data...</span>
+      <button class="refresh-btn" onclick="loadAllData()">
+        <span id="refreshIcon">🔄</span>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ── STATS ── -->
+    <div id="overview" class="stats-grid">
+      <div class="stat-card purple">
+        <div class="stat-header">
+          <div class="stat-icon purple">👥</div>
+          <span class="stat-badge positive" id="badge-users">live</span>
+        </div>
+        <div>
+          <div class="stat-value" id="val-users">—</div>
+          <div class="stat-label">Total Pengguna Terverifikasi</div>
+          <div class="stat-desc" id="desc-users">Memuat...</div>
+        </div>
+      </div>
+
+      <div class="stat-card blue">
+        <div class="stat-header">
+          <div class="stat-icon blue">📋</div>
+          <span class="stat-badge neutral" id="badge-logs">live</span>
+        </div>
+        <div>
+          <div class="stat-value" id="val-logs">—</div>
+          <div class="stat-label">Total Log Aktivitas</div>
+          <div class="stat-desc" id="desc-logs">Memuat...</div>
+        </div>
+      </div>
+
+      <div class="stat-card green">
+        <div class="stat-header">
+          <div class="stat-icon green">⏱️</div>
+          <span class="stat-badge positive" id="badge-dur">live</span>
+        </div>
+        <div>
+          <div class="stat-value" id="val-dur">—</div>
+          <div class="stat-label">Rata-rata Durasi Sesi</div>
+          <div class="stat-desc" id="desc-dur">Memuat...</div>
+        </div>
+      </div>
+
+      <div class="stat-card amber">
+        <div class="stat-header">
+          <div class="stat-icon amber">🔥</div>
+          <span class="stat-badge positive" id="badge-today">live</span>
+        </div>
+        <div>
+          <div class="stat-value" id="val-today">—</div>
+          <div class="stat-label">Aktif Hari Ini</div>
+          <div class="stat-desc" id="desc-today">Memuat...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TREND CHART ── -->
+    <div id="activity" class="trend-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">📈 Tren Aktivitas (30 Hari Terakhir)</div>
+          <div class="chart-subtitle">Jumlah log aktivitas per hari</div>
+        </div>
+        <span class="chart-badge">Harian</span>
+      </div>
+      <div class="trend-chart-container">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+
+    <!-- ── CHARTS ── -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">🕐 Aktivitas per Jam</div>
+            <div class="chart-subtitle">Distribusi penggunaan sepanjang hari</div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="hourlyChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">📅 Aktivitas per Hari</div>
+            <div class="chart-subtitle">Distribusi penggunaan per hari dalam seminggu</div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="dailyChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── USERS TABLE ── -->
+    <div id="users" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">👥 Daftar Pengguna</div>
+          <div class="section-subtitle">Data pengguna dari MongoDB secara real-time</div>
+        </div>
+        <button class="btn-secondary" onclick="loadUsers(1)" id="reloadUsersBtn" style="font-size:13px; padding:8px 14px;">
+          🔄 Reload
+        </button>
+      </div>
+      <div class="section-body" style="padding: 16px 24px;">
+        <div class="table-controls">
+          <div class="search-wrapper">
+            <span class="search-icon">🔎</span>
+            <input
+              type="text"
+              class="search-input"
+              id="userSearchInput"
+              placeholder="Cari nama atau email pengguna..."
+              oninput="debounceSearch(this.value)"
+            />
+          </div>
+        </div>
+        <div id="usersTableContainer">
+          <div class="empty-state">
+            <div class="empty-icon">⏳</div>
+            <div class="empty-text">Memuat data pengguna...</div>
+          </div>
+        </div>
+      </div>
+      <div class="table-footer" id="tableFooter" style="display:none;">
+        <span id="tableInfo">—</span>
+        <div class="pagination" id="paginationContainer"></div>
+      </div>
+    </div>
+
+    <!-- ── RECENT LOGS ── -->
+    <div id="recent-logs" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">📋 Log Aktivitas Terbaru</div>
+          <div class="section-subtitle">10 aktivitas pengguna terbaru dari database</div>
+        </div>
+      </div>
+      <div class="section-body" id="recentLogsContainer">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-text">Memuat...</div></div>
+      </div>
+    </div>
+
+    <!-- ── COMPETITOR ANALYSIS ── -->
+    <div id="competitor" class="section">
+      <div class="section-header">
+        <div>
+          <div class="section-title">🔍 Analisis Kompetitor</div>
+          <div class="section-subtitle">Scraping ulasan Google Play + Analisis AI Gemini</div>
+        </div>
+      </div>
+      <div class="section-body">
+        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
+          Pilih aplikasi kompetitor yang ingin di-scraping ulasannya dari Google Play Store, lalu jalankan analisis AI untuk mendapatkan rekomendasi strategis.
+        </p>
+
+        <!-- App Selection -->
+        <div class="apps-grid" id="appsGrid">
+          {% for comp in competitors %}
+          <label class="app-checkbox-label">
+            <input type="checkbox" value="{{ comp.app_id }}" checked class="app-check" />
+            <div class="app-checkbox-card">
+              <span class="app-checkbox-icon">📱</span>
+              <span class="app-checkbox-name">{{ comp.name }}</span>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-bar">
+          <button class="btn-primary" id="scrapeBtn" onclick="startScraping()">
+            <div class="btn-spin" id="scrapeSpin"></div>
+            <span id="scrapeBtnText">🔍 Scraping Ulasan</span>
+          </button>
+          <button class="btn-primary" id="aiBtn" onclick="runAIAnalysis()" disabled
+            style="background: linear-gradient(135deg, #059669, #0284c7);">
+            <div class="btn-spin" id="aiSpin"></div>
+            <span id="aiBtnText">🤖 Analisis dengan Gemini AI</span>
+          </button>
+          <button class="btn-secondary" id="clearBtn" onclick="clearResults()" style="display:none;">
+            🗑️ Hapus Hasil
+          </button>
+        </div>
+
+        <!-- Scraping Progress -->
+        <div id="scrapeProgress" style="display:none; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--blue-dim); border:1px solid rgba(59,130,246,0.25); border-radius:10px; font-size:13px; color:var(--blue);">
+            <div style="width:14px;height:14px;border:2px solid rgba(59,130,246,0.3);border-top-color:var(--blue);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;"></div>
+            <span id="scrapeProgressText">Mengambil ulasan...</span>
+          </div>
+        </div>
+
+        <!-- Scraping Results -->
+        <div class="scrape-results" id="scrapeResults"></div>
+
+        <!-- AI Analysis Result -->
+        <div class="ai-analysis-box" id="aiAnalysisBox">
+          <div class="ai-analysis-header">
+            <div class="ai-badge">✨ Gemini AI</div>
+            <span style="font-size:14px; font-weight:600;">Analisis Kompetitor EduTech</span>
+            <span class="ai-timestamp" id="aiTimestamp">—</span>
+          </div>
+          <div class="ai-content" id="aiContent"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+</main>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loadingText">Memuat...</div>
+</div>
+
+<script>
+  /* ─── Global state ─── */
+  let hourlyChart, dailyChart, trendChart;
+  let currentPage = 1;
+  let currentSearch = '';
+  let scrapedData = null;
+  let searchDebounce = null;
+
+  /* ─── Chart defaults ─── */
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  Chart.defaults.color = '#94a3b8';
+
+  const PURPLE = '#7c3aed';
+  const BLUE   = '#3b82f6';
+  const GREEN  = '#10b981';
+
+  /* ─── Utility ─── */
+  function showToast(msg, type = 'success') {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${type === 'success' ? '✅' : '❌'}</span><span>${msg}</span>`;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  function formatDuration(sec) {
+    if (!sec || sec === 0) return '0m';
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m >= 60) return `${Math.floor(m/60)}j ${m%60}m`;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  function formatNumber(n) {
+    return (n || 0).toLocaleString('id-ID');
+  }
+
+  function setNav(el) {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+  }
+  function setActiveNav(el) { setNav(el); }
+
+  function updateLastUpdated() {
+    const now = new Date().toLocaleTimeString('id-ID');
+    document.getElementById('lastUpdated').textContent = `Update: ${now}`;
+  }
+
+  /* ─── Load Stats ─── */
+  async function loadStats() {
+    try {
+      const res = await fetch('/admin/api/stats');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+
+      animateNumber('val-users', d.total_users || 0);
+      animateNumber('val-logs', d.total_logs || 0);
+      animateNumber('val-today', d.active_today || 0);
+
+      const dur = d.avg_duration_seconds || 0;
+      document.getElementById('val-dur').textContent = dur > 0 ? formatDuration(Math.round(dur)) : 'N/A';
+
+      document.getElementById('desc-users').textContent =
+        `${formatNumber(d.total_all_users)} total (termasuk belum verifikasi) · ${formatNumber(d.new_this_week)} baru minggu ini`;
+      document.getElementById('desc-logs').textContent =
+        `Total seluruh aktivitas tercatat di database`;
+      document.getElementById('desc-dur').textContent =
+        d.total_sessions > 0
+          ? `Dari ${formatNumber(d.total_sessions)} sesi tercatat`
+          : 'Belum ada data sesi (integrasi Flutter opsional)';
+      document.getElementById('desc-today').textContent =
+        `Pengguna dengan aktivitas hari ini`;
+
+    } catch (e) {
+      console.error('loadStats error:', e);
+      ['val-users','val-logs','val-dur','val-today'].forEach(id => {
+        document.getElementById(id).textContent = 'Err';
+      });
+    }
+  }
+
+  function animateNumber(elId, target) {
+    const el = document.getElementById(elId);
+    const start = 0;
+    const duration = 800;
+    const startTime = performance.now();
+    function step(now) {
+      const p = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = formatNumber(Math.round(start + (target - start) * eased));
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  /* ─── Load Charts ─── */
+  async function loadCharts() {
+    try {
+      const res = await fetch('/admin/api/activity-chart');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+
+      // Hourly chart
+      const hCtx = document.getElementById('hourlyChart').getContext('2d');
+      if (hourlyChart) hourlyChart.destroy();
+      hourlyChart = new Chart(hCtx, {
+        type: 'bar',
+        data: {
+          labels: d.hourly.labels,
+          datasets: [{
+            label: 'Aktivitas',
+            data: d.hourly.data,
+            backgroundColor: d.hourly.data.map((v, i) => {
+              const alpha = 0.3 + (v / Math.max(...d.hourly.data, 1)) * 0.7;
+              return `rgba(124,58,237,${alpha})`;
+            }),
+            borderColor: 'rgba(124,58,237,0.8)',
+            borderWidth: 1,
+            borderRadius: 4,
+          }]
+        },
+        options: chartOptions('Jam', 'Aktivitas')
+      });
+
+      // Daily chart
+      const dCtx = document.getElementById('dailyChart').getContext('2d');
+      if (dailyChart) dailyChart.destroy();
+      const dayColors = ['#7c3aed','#6366f1','#3b82f6','#0ea5e9','#10b981','#f59e0b','#ef4444'];
+      dailyChart = new Chart(dCtx, {
+        type: 'bar',
+        data: {
+          labels: d.daily.labels,
+          datasets: [{
+            label: 'Aktivitas',
+            data: d.daily.data,
+            backgroundColor: dayColors.map(c => c + '99'),
+            borderColor: dayColors,
+            borderWidth: 1.5,
+            borderRadius: 6,
+          }]
+        },
+        options: chartOptions('Hari', 'Aktivitas')
+      });
+
+      // Trend chart
+      const tCtx = document.getElementById('trendChart').getContext('2d');
+      if (trendChart) trendChart.destroy();
+      const gradient = tCtx.createLinearGradient(0, 0, 0, 160);
+      gradient.addColorStop(0, 'rgba(124,58,237,0.4)');
+      gradient.addColorStop(1, 'rgba(124,58,237,0.01)');
+      trendChart = new Chart(tCtx, {
+        type: 'line',
+        data: {
+          labels: d.trend.labels,
+          datasets: [{
+            label: 'Aktivitas',
+            data: d.trend.data,
+            backgroundColor: gradient,
+            borderColor: PURPLE,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: d.trend.data.length > 20 ? 2 : 4,
+            pointBackgroundColor: PURPLE,
+            pointBorderColor: 'rgba(124,58,237,0.3)',
+            pointBorderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { ...tooltipStyle() } },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', maxTicksLimit: 10, font: { size: 10 } } },
+            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 11 } }, beginAtZero: true }
+          }
+        }
+      });
+
+    } catch (e) {
+      console.error('loadCharts error:', e);
+    }
+  }
+
+  function chartOptions(xLabel, yLabel) {
+    return {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { ...tooltipStyle() } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0 } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 11 } }, beginAtZero: true }
+      }
+    };
+  }
+
+  function tooltipStyle() {
+    return {
+      backgroundColor: 'rgba(13,18,33,0.95)',
+      borderColor: 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      titleColor: '#f1f5f9',
+      bodyColor: '#94a3b8',
+      padding: 10,
+      cornerRadius: 10,
+    };
+  }
+
+  /* ─── Load Users ─── */
+  async function loadUsers(page = 1, search = '') {
+    currentPage = page;
+    currentSearch = search;
+    const container = document.getElementById('usersTableContainer');
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-text">Memuat data pengguna...</div></div>';
+    document.getElementById('tableFooter').style.display = 'none';
+
+    try {
+      const params = new URLSearchParams({ page, limit: 15, search });
+      const res = await fetch(`/admin/api/users?${params}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+
+      if (!d.users || d.users.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">😶</div><div class="empty-text">Tidak ada pengguna ditemukan</div></div>';
+        return;
+      }
+
+      const maxPts = Math.max(...d.users.map(u => u.total_points || 0), 1);
+      const rows = d.users.map(u => `
+        <tr>
+          <td>
+            <div class="user-cell">
+              <div class="user-avatar">${u.profile_pict && u.profile_pict.length < 5 ? u.profile_pict : '🧒'}</div>
+              <div>
+                <div class="user-name">${esc(u.nama_lengkap || '—')}</div>
+                <div class="user-email">${esc(u.email || '—')}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="badge ${u.is_verified ? 'badge-verified' : 'badge-unverified'}">
+              ${u.is_verified ? '✅ Terverifikasi' : '⏳ Belum'}
+            </span>
+          </td>
+          <td>
+            <div class="points-bar-wrap">
+              <div class="badge badge-points">${formatNumber(u.total_points)} pts</div>
+              <div class="points-bar">
+                <div class="points-bar-fill" style="width:${Math.round((u.total_points/maxPts)*100)}%"></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-streak">🔥 ${u.streak_days} hari</span></td>
+          <td style="color:var(--text-secondary); font-size:12px;">${formatNumber(u.activity_count)} aktivitas</td>
+          <td style="color:var(--text-dim); font-size:11px;">${esc(u.created_at || '—')}</td>
+        </tr>
+      `).join('');
+
+      container.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Pengguna</th>
+              <th>Status</th>
+              <th>Poin</th>
+              <th>Streak</th>
+              <th>Aktivitas</th>
+              <th>Terdaftar</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+
+      // Pagination
+      const footer = document.getElementById('tableFooter');
+      footer.style.display = 'flex';
+      document.getElementById('tableInfo').textContent =
+        `Menampilkan ${(page-1)*15+1}–${Math.min(page*15, d.total)} dari ${formatNumber(d.total)} pengguna`;
+
+      const pgc = document.getElementById('paginationContainer');
+      pgc.innerHTML = '';
+      for (let p = 1; p <= Math.min(d.total_pages, 8); p++) {
+        const btn = document.createElement('button');
+        btn.className = `page-btn${p === page ? ' active' : ''}`;
+        btn.textContent = p;
+        btn.onclick = () => loadUsers(p, currentSearch);
+        pgc.appendChild(btn);
+      }
+
+    } catch (e) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">Gagal memuat: ${e.message}</div></div>`;
+    }
+  }
+
+  function debounceSearch(val) {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => loadUsers(1, val), 400);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* ─── Load Recent Logs ─── */
+  async function loadRecentLogs() {
+    const container = document.getElementById('recentLogsContainer');
+    try {
+      const res = await fetch('/admin/api/recent-logs?limit=10');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+
+      if (!d.logs || d.logs.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">Belum ada log aktivitas</div></div>';
+        return;
+      }
+
+      container.innerHTML = d.logs.map(log => `
+        <div class="log-item">
+          <div class="log-dot"></div>
+          <div style="flex:1; min-width:0;">
+            <div class="log-action">${esc(log.action || '—')}</div>
+            <div class="log-meta">
+              <strong>${esc(log.nama_lengkap || 'Unknown')}</strong>
+              ${log.description ? ' · ' + esc(log.description.substring(0,60)) : ''}
+              ${log.points_earned ? ` · +${log.points_earned} pts` : ''}
+            </div>
+          </div>
+          <div class="log-time">${esc(log.timestamp ? log.timestamp.substring(11,16) : '—')}</div>
+        </div>
+      `).join('');
+
+    } catch (e) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">Gagal memuat: ${e.message}</div></div>`;
+    }
+  }
+
+  /* ─── Scraping ─── */
+  async function startScraping() {
+    const checked = [...document.querySelectorAll('.app-check:checked')].map(c => c.value);
+    if (checked.length === 0) {
+      showToast('Pilih minimal 1 aplikasi kompetitor!', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('scrapeBtn');
+    const spin = document.getElementById('scrapeSpin');
+    const btnText = document.getElementById('scrapeBtnText');
+    const progress = document.getElementById('scrapeProgress');
+    const progressText = document.getElementById('scrapeProgressText');
+    const resultsDiv = document.getElementById('scrapeResults');
+    const aiBtn = document.getElementById('aiBtn');
+
+    btn.disabled = true;
+    spin.style.display = 'block';
+    btnText.textContent = 'Mengambil ulasan...';
+    progress.style.display = 'block';
+    progressText.textContent = `Mengambil ulasan dari ${checked.length} aplikasi...`;
+    resultsDiv.innerHTML = '';
+    resultsDiv.style.display = 'none';
+    document.getElementById('aiAnalysisBox').style.display = 'none';
+    aiBtn.disabled = true;
+
+    try {
+      const res = await fetch('/admin/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ app_ids: checked })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+
+      scrapedData = d.results;
+      resultsDiv.style.display = 'flex';
+      resultsDiv.innerHTML = '';
+
+      let totalReviews = 0;
+      for (const [appId, data] of Object.entries(d.results)) {
+        if (data.error) {
+          resultsDiv.innerHTML += `
+            <div class="app-reviews-card">
+              <div class="app-reviews-header">
+                <span class="app-reviews-title">📱 ${esc(appId)}</span>
+                <span style="color:var(--red); font-size:12px;">❌ Gagal: ${esc(data.error)}</span>
+              </div>
+            </div>`;
+          continue;
+        }
+        totalReviews += data.total_fetched || 0;
+        const reviewsHtml = (data.reviews || []).slice(0,10).map(r => {
+          const starClass = r.score >= 4 ? 'star-high' : r.score >= 3 ? 'star-mid' : 'star-low';
+          const stars = '⭐'.repeat(r.score) + '☆'.repeat(5 - r.score);
+          return `
+            <div class="review-item">
+              <div class="review-meta">
+                <span class="review-user">${esc(r.username)}</span>
+                <span class="review-stars ${starClass}">${stars}</span>
+                <span style="font-size:11px; color:var(--text-dim);">${r.score}/5</span>
+              </div>
+              <div class="review-content">${esc((r.content || '').substring(0, 200))}${r.content && r.content.length > 200 ? '...' : ''}</div>
+            </div>`;
+        }).join('');
+        resultsDiv.innerHTML += `
+          <div class="app-reviews-card">
+            <div class="app-reviews-header">
+              <span class="app-reviews-title">📱 ${esc(data.app_name || appId)}</span>
+              <span class="app-reviews-count">${data.total_fetched} ulasan diambil</span>
+            </div>
+            <div class="reviews-list">${reviewsHtml || '<div style="padding:16px;color:var(--text-dim);font-size:13px;">Tidak ada ulasan tersedia</div>'}</div>
+          </div>`;
+      }
+
+      if (Object.keys(d.errors || {}).length > 0) {
+        showToast(`Beberapa aplikasi gagal di-scrape. ${totalReviews} ulasan berhasil diambil.`, 'error');
+      } else {
+        showToast(`Berhasil mengambil ${totalReviews} ulasan dari ${Object.keys(d.results).length} aplikasi!`);
+      }
+
+      if (Object.keys(scrapedData).length > 0) {
+        aiBtn.disabled = false;
+        document.getElementById('clearBtn').style.display = 'inline-flex';
+      }
+
+    } catch (e) {
+      showToast(`Scraping gagal: ${e.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      spin.style.display = 'none';
+      btnText.textContent = '🔍 Scraping Ulasan';
+      progress.style.display = 'none';
+    }
+  }
+
+  /* ─── AI Analysis ─── */
+  async function runAIAnalysis() {
+    if (!scrapedData) { showToast('Lakukan scraping terlebih dahulu!', 'error'); return; }
+
+    const btn = document.getElementById('aiBtn');
+    const spin = document.getElementById('aiSpin');
+    const btnText = document.getElementById('aiBtnText');
+    const box = document.getElementById('aiAnalysisBox');
+
+    btn.disabled = true;
+    spin.style.display = 'block';
+    btnText.textContent = 'Menganalisis dengan AI...';
+    box.style.display = 'none';
+
+    try {
+      const res = await fetch('/admin/api/ai-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviews_data: scrapedData })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+
+      if (d.error) throw new Error(d.error);
+
+      box.style.display = 'block';
+      document.getElementById('aiTimestamp').textContent = d.timestamp || '';
+      document.getElementById('aiContent').innerHTML = markdownToHtml(d.analysis || '');
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast('Analisis AI selesai!');
+
+    } catch (e) {
+      showToast(`Analisis AI gagal: ${e.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      spin.style.display = 'none';
+      btnText.textContent = '🤖 Analisis dengan Gemini AI';
+    }
+  }
+
+  function clearResults() {
+    scrapedData = null;
+    document.getElementById('scrapeResults').style.display = 'none';
+    document.getElementById('scrapeResults').innerHTML = '';
+    document.getElementById('aiAnalysisBox').style.display = 'none';
+    document.getElementById('aiBtn').disabled = true;
+    document.getElementById('clearBtn').style.display = 'none';
+    showToast('Hasil dihapus');
+  }
+
+  /* ─── Markdown to HTML (simple) ─── */
+  function markdownToHtml(text) {
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^### (.+)$/gm, '<h3 style="font-size:14px;font-weight:600;color:var(--text-primary);margin:14px 0 8px;">$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+  }
+
+  /* ─── Load all ─── */
+  async function loadAllData() {
+    const icon = document.getElementById('refreshIcon');
+    icon.style.animation = 'spin 0.7s linear infinite';
+    await Promise.all([loadStats(), loadCharts(), loadRecentLogs()]);
+    icon.style.animation = '';
+    updateLastUpdated();
+  }
+
+  /* ─── Init ─── */
+  document.addEventListener('DOMContentLoaded', () => {
+    loadAllData();
+    loadUsers(1);
+    // Auto-refresh every 60 seconds
+    setInterval(loadAllData, 60000);
+  });
+</script>
+</body>
+</html>
