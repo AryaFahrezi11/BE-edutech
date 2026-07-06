@@ -15,6 +15,7 @@ import smtplib
 import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from pymongo import MongoClient
 
 
 main = Blueprint('main', __name__)
@@ -26,6 +27,12 @@ client = genai.Client(api_key=GEMINI_KEY)
 # --- KONFIGURASI EMAIL PENGIRIM ---
 SENDER_EMAIL = os.getenv("SENDER_EMAIL") 
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+
+# --- MONGODB ATLAS CONNECTION ---
+MONGO_URI = os.getenv("MONGO_URI")
+mongo_client = MongoClient(MONGO_URI) if MONGO_URI else None
+mongo_db = mongo_client['edutech_db'] if mongo_client is not None else None
+mongo_collection = mongo_db['writing_analytics'] if mongo_db is not None else None
 
 
 @main.route('/api/login', methods=['POST'])
@@ -480,3 +487,132 @@ def update_profile():
     except Exception as e:
         db.session.rollback()
         return jsonify({"status": "error", "message": f"Gagal memperbarui profil: {str(e)}"}), 500
+
+@main.route('/api/analytics', methods=['POST'])
+def save_analytics():
+    if mongo_collection is None:
+        return jsonify({"error": "Koneksi MongoDB belum diatur di .env (MONGO_URI)"}), 500
+
+    try:
+        # 1. Tangkap JSON dari Flutter (Gemini Analytics)
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "Tidak ada data JSON yang diterima"}), 400
+
+        # 2. Opsional: Tambahkan waktu server
+        data['server_timestamp'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        # 3. Simpan ke MongoDB Atlas
+        mongo_collection.insert_one(data)
+        
+        # Hapus _id (ObjectId) sebelum dikembalikan sebagai response sukses (karena tidak bisa di-serialize)
+        data.pop('_id', None)
+
+        print("Berhasil menyimpan data analitik ke MongoDB!")
+        return jsonify({
+            "message": "Data berhasil disimpan ke Big Data",
+            "data": data
+        }), 201
+
+    except Exception as e:
+        print(f"Error saat menyimpan analytics: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@main.route('/api/raport', methods=['GET'])
+def get_raport():
+    if mongo_collection is None:
+        return jsonify({"error": "Koneksi MongoDB belum diatur di .env (MONGO_URI)"}), 500
+
+    email = request.args.get('email')
+    if not email:
+        return jsonify({"status": "error", "message": "Email diperlukan"}), 400
+
+    try:
+        cursor = mongo_collection.find({"email": email})
+        records = list(cursor)
+
+        if not records:
+            return jsonify({
+                "status": "success",
+                "data": {
+                    "skills": [0, 0, 0, 0],
+                    "ai_recommendation": "Halo Ayah/Bunda! Ananda belum mulai mengerjakan ujian menulis. Yuk, ajak Ananda untuk mulai berlatih sekarang! 🚀",
+                    "strengths": [],
+                    "weaknesses": []
+                }
+            }), 200
+
+        total_accuracy = sum(r.get('accuracy_score', 0) for r in records)
+        avg_accuracy = total_accuracy / len(records)
+
+        wrong_letters_count = {}
+        error_types_count = {}
+        for r in records:
+            # Hitung huruf salah dengan spesifik (kapital/kecil)
+            wrongs = r.get('wrong_letters', [])
+            for w in wrongs:
+                if w:
+                    if w.isupper():
+                        w_str = f"kapital '{w}'"
+                    else:
+                        w_str = f"kecil '{w}'"
+                    wrong_letters_count[w_str] = wrong_letters_count.get(w_str, 0) + 1
+            
+            # Hitung tipe kesalahan
+            err_type = r.get('error_type')
+            if err_type and err_type != "benar":
+                error_types_count[err_type] = error_types_count.get(err_type, 0) + 1
+
+        strengths = []
+        weaknesses = []
+
+        # Analisis Akurasi
+        if avg_accuracy >= 80:
+            strengths.append(f"Akurasi menulis sangat baik mencapai {avg_accuracy:.0f}%.")
+        elif avg_accuracy >= 60:
+            strengths.append(f"Akurasi menulis cukup baik ({avg_accuracy:.0f}%), namun masih bisa dimaksimalkan.")
+        else:
+            weaknesses.append(f"Akurasi menulis perlu ditingkatkan (saat ini {avg_accuracy:.0f}%).")
+
+        # Analisis Huruf Tersulit
+        most_wrong_letter = None
+        if wrong_letters_count:
+            most_wrong_letter = max(wrong_letters_count, key=wrong_letters_count.get)
+            weaknesses.append(f"Sering terbalik/kesulitan saat menulis huruf {most_wrong_letter}.")
+        
+        # Analisis Tipe Kesalahan
+        if error_types_count:
+            most_common_error = max(error_types_count, key=error_types_count.get)
+            formatted_error = most_common_error.replace('_', ' ')
+            weaknesses.append(f"Tipe kesalahan dominan: {formatted_error}.")
+        else:
+            if avg_accuracy > 90:
+                strengths.append("Hampir tidak ada kesalahan bentuk dalam penulisan.")
+
+        # Pesan AI Executive Summary
+        if most_wrong_letter:
+            ai_recommendation = f"Halo Ayah/Bunda! Ananda menunjukkan semangat belajar yang tinggi. Saat ini, Ananda butuh sedikit bimbingan ekstra untuk melatih bentuk huruf {most_wrong_letter}. Yuk, temani Ananda berlatih menulis huruf tersebut di rumah!"
+        elif avg_accuracy >= 80:
+            ai_recommendation = "Halo Ayah/Bunda! Perkembangan belajar Ananda sungguh luar biasa! Keterampilan menulisnya sudah sangat rapi dan akurat. Terus berikan pujian untuk menjaga semangatnya ya!"
+        else:
+            ai_recommendation = "Halo Ayah/Bunda! Ananda sedang dalam tahap beradaptasi dengan bentuk huruf. Dampingi Ananda dan gunakan fitur 'Latihan Menulis' agar otot motoriknya semakin terbiasa."
+
+        # Ekstrak data trend akurasi (maksimal 10 ujian terakhir)
+        accuracy_trend = [r.get('accuracy_score', 0) for r in records[-10:]]
+
+        return jsonify({
+            "status": "success",
+            "data": {
+                # Urutan: Menulis, Mengeja, Observasi, Duel (Hanya fitur yang ada di app)
+                "skills": [avg_accuracy, 75, 80, 85],
+                "ai_recommendation": ai_recommendation,
+                "strengths": strengths,
+                "weaknesses": weaknesses,
+                "accuracy_trend": accuracy_trend
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"Error saat mengambil raport: {e}")
+        return jsonify({"error": str(e)}), 500
