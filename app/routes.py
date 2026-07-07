@@ -17,7 +17,6 @@ import smtplib
 import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from pymongo import MongoClient
 
 
 main = Blueprint('main', __name__)
@@ -27,12 +26,10 @@ main = Blueprint('main', __name__)
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
 
-# --- MONGODB ATLAS CONNECTION ---
-MONGO_URI = os.getenv("MONGO_URI")
-mongo_client = MongoClient(MONGO_URI) if MONGO_URI else None
-mongo_db = mongo_client['edutech_db'] if mongo_client is not None else None
-mongo_collection = mongo_db['writing_analytics'] if mongo_db is not None else None
-
+# --- MONGODB COLLECTION ---
+# writing_analytics menggunakan db dari app.extensions
+def get_analytics_collection():
+    return db['writing_analytics']
 
 def _now_ts_str():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -366,17 +363,22 @@ Langkah 1 — Tentukan status:
 - Jika sama → status = "benar"
 - Jika berbeda → status = "salah"
 
-Langkah 2 — Buat feedback:
-- Jika status = "salah": jelaskan letak kesalahannya secara sederhana, sebutkan huruf/kata yang salah dan yang seharusnya, lalu beri semangat untuk mencoba lagi.
-  Jika jenis ujian = 'kata' dan ada huruf yang kurang baik, sebutkan huruf tersebut.
-- Jika status = "benar": beri pujian yang hangat.
-  Jika tulisan masih kurang rapi, berikan saran yang lembut agar makin baik.
+Langkah 2 — Buat feedback & analytics_data:
+- Buat "tts": Jika status = "salah": jelaskan letak kesalahannya secara sederhana, lalu beri semangat. Jika "benar": beri pujian yang hangat.
+- Buat "analytics_data" (HANYA jika status = "salah"). Tentukan huruf yang kemungkinan salah ditulis (wrong_letters), jenis kesalahannya (error_type: "kesalahan_bentuk", "typo", "tidak_terbaca"), dan estimasi accuracy_score (0-100). Jika status = "benar", accuracy_score = 100 dan list wrong_letters kosong.
 
 Jawab HANYA dalam format JSON berikut:
 {{
   "status": "benar" atau "salah",
   "feedback": "kalimat evaluasi singkat",
-  "tts": "kalimat yang akan dibacakan"
+  "tts": "kalimat yang akan dibacakan",
+  "analytics_data": {{
+    "target_word": "{target}",
+    "written_word": "{hasil_ocr}",
+    "wrong_letters": ["A", "B"],
+    "error_type": "kesalahan_bentuk",
+    "accuracy_score": 85
+  }}
 }}"""
 
         elif mode == 'reading':
@@ -436,9 +438,10 @@ Jawab HANYA dalam format JSON berikut:
         status_eval = hasil_json.get('status', 'salah')
         feedback = hasil_json.get('feedback', '')
         tts = hasil_json.get('tts', '')
+        analytics_data = hasil_json.get('analytics_data')
         result = "correct" if status_eval == "benar" else "incorrect"
 
-        return jsonify({"status": "success", "result": result, "feedback": feedback, "tts": tts}), 200
+        return jsonify({"status": "success", "result": result, "feedback": feedback, "tts": tts, "analytics_data": analytics_data}), 200
 
     except concurrent.futures.TimeoutError:
         return jsonify({"status": "error", "message": "Proses evaluasi memakan waktu terlalu lama. Coba lagi ya."}), 504
@@ -740,13 +743,13 @@ def update_profile():
         }), 200
 
     except Exception as e:
-        db.session.rollback()
+        # PyMongo tidak menggunakan db.session.rollback()
         return jsonify({"status": "error", "message": f"Gagal memperbarui profil: {str(e)}"}), 500
 
 @main.route('/api/analytics', methods=['POST'])
 def save_analytics():
-    if mongo_collection is None:
-        return jsonify({"error": "Koneksi MongoDB belum diatur di .env (MONGO_URI)"}), 500
+    if db is None:
+        return jsonify({"error": "Koneksi MongoDB bermasalah"}), 500
 
     try:
         # 1. Tangkap JSON dari Flutter (Gemini Analytics)
@@ -759,7 +762,7 @@ def save_analytics():
         data['server_timestamp'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         # 3. Simpan ke MongoDB Atlas
-        mongo_collection.insert_one(data)
+        get_analytics_collection().insert_one(data)
         
         # Hapus _id (ObjectId) sebelum dikembalikan sebagai response sukses (karena tidak bisa di-serialize)
         data.pop('_id', None)
@@ -776,15 +779,15 @@ def save_analytics():
 
 @main.route('/api/raport', methods=['GET'])
 def get_raport():
-    if mongo_collection is None:
-        return jsonify({"error": "Koneksi MongoDB belum diatur di .env (MONGO_URI)"}), 500
+    if db is None:
+        return jsonify({"error": "Koneksi MongoDB bermasalah"}), 500
 
     email = request.args.get('email')
     if not email:
         return jsonify({"status": "error", "message": "Email diperlukan"}), 400
 
     try:
-        cursor = mongo_collection.find({"email": email})
+        cursor = get_analytics_collection().find({"email": email})
         records = list(cursor)
 
         if not records:

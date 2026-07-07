@@ -62,9 +62,9 @@ def _init_admin_user():
                 "role": "superadmin",
                 "created_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
-            print("[Admin Init] ✅ Akun admin default berhasil dibuat.")
+            print("[Admin Init] [OK] Akun admin default berhasil dibuat.")
             print("[Admin Init]    Username: edutech | Password: edutech2026")
         else:
-            print("[Admin Init] ✅ Koleksi admins sudah ada, skip inisialisasi.")
+            print("[Admin Init] [OK] Koleksi admins sudah ada, skip inisialisasi.")
     except Exception as e:
-        print(f"[Admin Init] ⚠️  Gagal membuat admin default: {e}")
+        print(f"[Admin Init] [WARNING] Gagal membuat admin default: {e}")
