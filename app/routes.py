@@ -68,7 +68,13 @@ def login_user():
     user_doc = users_col.find_one({"email": email})
     user_doc = _ensure_defaults_user_doc(user_doc)
 
-    if not user_doc or not check_password_hash(user_doc.get("password"), password):
+    if not user_doc:
+        return jsonify({
+            "status": "unregistered", 
+            "message": "Akun kamu belum terdaftar nih! Yuk buat akun baru dulu."
+        }), 404
+
+    if not check_password_hash(user_doc.get("password"), password):
         return jsonify({"status": "error", "message": "Email atau Password salah!"}), 401
 
     if not user_doc.get("is_verified", False):
