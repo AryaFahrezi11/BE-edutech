@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -917,10 +918,29 @@
         </div>
 
         <!-- Scraping Progress -->
+        <!-- Scraping Progress -->
         <div id="scrapeProgress" style="display:none; margin-bottom:16px;">
           <div style="display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--blue-dim); border:1px solid rgba(59,130,246,0.25); border-radius:10px; font-size:13px; color:var(--blue);">
             <div style="width:14px;height:14px;border:2px solid rgba(59,130,246,0.3);border-top-color:var(--blue);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;"></div>
             <span id="scrapeProgressText">Mengambil ulasan...</span>
+          </div>
+        </div>
+
+        <!-- Scraping Visualizations -->
+        <div id="scrapeVisualizations" style="display:none; margin-bottom:16px;">
+          <div style="display:grid; grid-template-columns: 1fr 2fr 2fr; gap:16px; align-items:stretch;">
+            <div style="background:var(--bg-2); border:1px solid var(--border); padding:16px; border-radius:10px;">
+              <div class="section-title" style="font-size:14px; margin-bottom:16px;">Statistik Review</div>
+              <div id="reviewStatsContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+            <div style="background:var(--bg-2); border:1px solid var(--border); padding:16px; border-radius:10px;">
+              <div class="section-title" style="font-size:14px; margin-bottom:16px;">Rating Distribution</div>
+              <canvas id="ratingChart" height="200" style="max-height:200px;"></canvas>
+            </div>
+            <div style="background:var(--bg-2); border:1px solid var(--border); padding:16px; border-radius:10px;">
+              <div class="section-title" style="font-size:14px; margin-bottom:16px;">Top Keywords (WordCloud)</div>
+              <canvas id="wordCloudCanvas" height="200" style="width:100%; max-height:200px;"></canvas>
+            </div>
           </div>
         </div>
 
@@ -1322,55 +1342,12 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const d = await res.json();
 
-      scrapedData = d.results;
-      resultsDiv.style.display = 'flex';
-      resultsDiv.innerHTML = '';
-
-      let totalReviews = 0;
-      for (const [appId, data] of Object.entries(d.results)) {
-        if (data.error) {
-          resultsDiv.innerHTML += `
-            <div class="app-reviews-card">
-              <div class="app-reviews-header">
-                <span class="app-reviews-title">📱 ${esc(appId)}</span>
-                <span style="color:var(--red); font-size:12px;">❌ Gagal: ${esc(data.error)}</span>
-              </div>
-            </div>`;
-          continue;
-        }
-        totalReviews += data.total_fetched || 0;
-        const reviewsHtml = (data.reviews || []).slice(0,10).map(r => {
-          const starClass = r.score >= 4 ? 'star-high' : r.score >= 3 ? 'star-mid' : 'star-low';
-          const stars = '⭐'.repeat(r.score) + '☆'.repeat(5 - r.score);
-          return `
-            <div class="review-item">
-              <div class="review-meta">
-                <span class="review-user">${esc(r.username)}</span>
-                <span class="review-stars ${starClass}">${stars}</span>
-                <span style="font-size:11px; color:var(--text-dim);">${r.score}/5</span>
-              </div>
-              <div class="review-content">${esc((r.content || '').substring(0, 200))}${r.content && r.content.length > 200 ? '...' : ''}</div>
-            </div>`;
-        }).join('');
-        resultsDiv.innerHTML += `
-          <div class="app-reviews-card">
-            <div class="app-reviews-header">
-              <span class="app-reviews-title">📱 ${esc(data.app_name || appId)}</span>
-              <span class="app-reviews-count">${data.total_fetched} ulasan diambil</span>
-            </div>
-            <div class="reviews-list">${reviewsHtml || '<div style="padding:16px;color:var(--text-dim);font-size:13px;">Tidak ada ulasan tersedia</div>'}</div>
-          </div>`;
-      }
+      renderScrapingData(d);
 
       if (Object.keys(d.errors || {}).length > 0) {
-        showToast(`Beberapa aplikasi gagal di-scrape. ${totalReviews} ulasan berhasil diambil.`, 'error');
+        showToast(`Beberapa aplikasi gagal di-scrape.`, 'error');
       } else {
-        showToast(`Berhasil mengambil ${totalReviews} ulasan dari ${Object.keys(d.results).length} aplikasi!`);
-      }
-
-      if (Object.keys(scrapedData).length > 0) {
-        aiBtn.disabled = false;
-        document.getElementById('clearBtn').style.display = 'inline-flex';
+        showToast(`Berhasil mengambil ulasan!`);
       }
 
     } catch (e) {
@@ -1427,10 +1404,153 @@
     scrapedData = null;
     document.getElementById('scrapeResults').style.display = 'none';
     document.getElementById('scrapeResults').innerHTML = '';
+    document.getElementById('scrapeVisualizations').style.display = 'none';
     document.getElementById('aiAnalysisBox').style.display = 'none';
     document.getElementById('aiBtn').disabled = true;
     document.getElementById('clearBtn').style.display = 'none';
     showToast('Hasil dihapus');
+  }
+
+  let currentRatingChart = null;
+  function renderScrapingData(d) {
+    const resultsDiv = document.getElementById('scrapeResults');
+    const visDiv = document.getElementById('scrapeVisualizations');
+    const aiBtn = document.getElementById('aiBtn');
+    
+    scrapedData = d.results || d; // Handle fallback structure
+    let dataResults = scrapedData;
+    
+    if (!dataResults || Object.keys(dataResults).length === 0) return;
+    
+    resultsDiv.style.display = 'flex';
+    visDiv.style.display = 'block';
+    resultsDiv.innerHTML = '';
+    
+    let totalReviews = 0;
+    let totalScore = 0;
+    let totalApps = 0;
+    let aggRatingDist = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0};
+    let allKeywords = [];
+
+    for (const [appId, data] of Object.entries(dataResults)) {
+      if (data.error) {
+        resultsDiv.innerHTML += `
+          <div class="app-reviews-card">
+            <div class="app-reviews-header">
+              <span class="app-reviews-title">📱 ${esc(appId)}</span>
+              <span style="color:var(--red); font-size:12px;">❌ Gagal: ${esc(data.error)}</span>
+            </div>
+          </div>`;
+        continue;
+      }
+      totalApps++;
+      totalReviews += data.total_fetched || 0;
+      
+      if (data.analysis) {
+        const stats = data.analysis.stats;
+        const rDist = data.analysis.rating_distribution;
+        const kw = data.analysis.top_keywords;
+        
+        totalScore += stats.average_rating * stats.total_reviews;
+        for (let i = 1; i <= 5; i++) aggRatingDist[i] += (rDist[i] || 0);
+        
+        allKeywords.push(...(kw || []));
+      }
+      
+      const reviewsHtml = (data.reviews || []).slice(0,10).map(r => {
+        const starClass = r.score >= 4 ? 'star-high' : r.score >= 3 ? 'star-mid' : 'star-low';
+        const stars = '⭐'.repeat(r.score) + '☆'.repeat(5 - r.score);
+        return `
+          <div class="review-item">
+            <div class="review-meta">
+              <span class="review-user">${esc(r.username)}</span>
+              <span class="review-stars ${starClass}">${stars}</span>
+              <span style="font-size:11px; color:var(--text-dim);">${r.score}/5</span>
+            </div>
+            <div class="review-content">${esc((r.content || '').substring(0, 200))}${r.content && r.content.length > 200 ? '...' : ''}</div>
+          </div>`;
+      }).join('');
+      resultsDiv.innerHTML += `
+        <div class="app-reviews-card">
+          <div class="app-reviews-header">
+            <span class="app-reviews-title">📱 ${esc(data.app_name || appId)}</span>
+            <span class="app-reviews-count">${data.total_fetched} ulasan diambil</span>
+          </div>
+          <div class="reviews-list">${reviewsHtml || '<div style="padding:16px;color:var(--text-dim);font-size:13px;">Tidak ada ulasan tersedia</div>'}</div>
+        </div>`;
+    }
+
+    if (totalApps > 0) {
+      aiBtn.disabled = false;
+      document.getElementById('clearBtn').style.display = 'inline-flex';
+      
+      // Update Stats
+      let avg = totalReviews > 0 ? (totalScore / totalReviews).toFixed(1) : 0;
+      document.getElementById('reviewStatsContainer').innerHTML = `
+        <div style="font-size:24px; font-weight:700; color:var(--purple);">${totalReviews}</div>
+        <div style="font-size:12px; color:var(--text-secondary); margin-bottom:12px;">Total Ulasan</div>
+        <div style="font-size:24px; font-weight:700; color:var(--amber);">${avg} <span style="font-size:16px">⭐</span></div>
+        <div style="font-size:12px; color:var(--text-secondary);">Rata-rata Rating</div>
+      `;
+
+      // Update Chart
+      const ctx = document.getElementById('ratingChart').getContext('2d');
+      if (currentRatingChart) currentRatingChart.destroy();
+      currentRatingChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['1', '2', '3', '4', '5'],
+          datasets: [{
+            label: 'Jumlah',
+            data: [aggRatingDist["1"], aggRatingDist["2"], aggRatingDist["3"], aggRatingDist["4"], aggRatingDist["5"]],
+            backgroundColor: ['#ef4444', '#f59e0b', '#fbbf24', '#34d399', '#10b981'],
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8' } }, x: { ticks: { color: '#94a3b8' } } },
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      // Update WordCloud
+      let kwMap = {};
+      allKeywords.forEach(k => {
+        kwMap[k.text] = (kwMap[k.text] || 0) + k.weight;
+      });
+      let sortedKw = Object.entries(kwMap).sort((a,b)=>b[1]-a[1]).slice(0, 50);
+      if (sortedKw.length > 0 && typeof WordCloud !== 'undefined') {
+        let maxW = sortedKw[0][1];
+        let scaledKw = sortedKw.map(x => [x[0], Math.max(12, (x[1]/maxW) * 40)]);
+        WordCloud(document.getElementById('wordCloudCanvas'), {
+          list: scaledKw,
+          fontFamily: 'Inter',
+          color: 'random-light',
+          backgroundColor: 'transparent',
+          minSize: 4,
+          weightFactor: 1
+        });
+      }
+    }
+  }
+
+  async function loadLatestScrape() {
+    try {
+      const res = await fetch('/admin/api/latest-scrape');
+      if (res.ok) {
+        const d = await res.json();
+        if (d.status === 'success' && d.data && d.data.results) {
+          // Check checkboxes that match
+          const apps = Object.keys(d.data.results);
+          document.querySelectorAll('.app-check').forEach(c => {
+             c.checked = apps.includes(c.value);
+          });
+          renderScrapingData(d.data);
+        }
+      }
+    } catch(e) { console.error('Failed to load latest scrape', e); }
   }
 
   /* ─── Markdown to HTML (simple) ─── */
@@ -1460,6 +1580,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     loadAllData();
     loadUsers(1);
+    loadLatestScrape();
     // Auto-refresh every 60 seconds
     setInterval(loadAllData, 60000);
   });
