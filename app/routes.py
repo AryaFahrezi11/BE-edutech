@@ -564,75 +564,108 @@ def get_raport():
                 "status": "success",
                 "data": {
                     "skills": [0, 0, 0, 0],
-                    "ai_recommendation": "Halo Ayah/Bunda! Ananda belum mulai mengerjakan ujian menulis. Yuk, ajak Ananda untuk mulai berlatih sekarang! 🚀",
+                    "ai_recommendation": "Halo Ayah/Bunda! Ananda belum mulai mengerjakan ujian menulis maupun mengeja. Yuk, ajak Ananda untuk mulai berlatih sekarang! 🚀",
                     "strengths": [],
                     "weaknesses": []
                 }
             }), 200
 
-        total_accuracy = sum(r.get('accuracy_score', 0) for r in records)
-        avg_accuracy = total_accuracy / len(records)
+        writing_records = [r for r in records if r.get('mode') == 'writing']
+        spelling_records = [r for r in records if r.get('mode') == 'spelling']
+        
+        # Akurasi Menulis
+        writing_accuracy = sum(r.get('accuracy_score', 0) for r in writing_records) / len(writing_records) if writing_records else 0
+        
+        # Akurasi Mengeja
+        spelling_accuracy = sum(r.get('accuracy_score', 0) for r in spelling_records) / len(spelling_records) if spelling_records else 0
 
-        wrong_letters_count = {}
-        error_types_count = {}
-        for r in records:
-            # Hitung huruf salah dengan spesifik (kapital/kecil)
-            wrongs = r.get('wrong_letters', [])
-            for w in wrongs:
-                if w:
-                    if w.isupper():
-                        w_str = f"kapital '{w}'"
-                    else:
-                        w_str = f"kecil '{w}'"
-                    wrong_letters_count[w_str] = wrong_letters_count.get(w_str, 0) + 1
-            
-            # Hitung tipe kesalahan
-            err_type = r.get('error_type')
-            if err_type and err_type != "benar":
-                error_types_count[err_type] = error_types_count.get(err_type, 0) + 1
+        def get_wrong_letters(record_list):
+            counts = {}
+            for r in record_list:
+                for w in r.get('wrong_letters', []):
+                    if w:
+                        w_str = f"kapital '{w}'" if w.isupper() else f"kecil '{w}'"
+                        counts[w_str] = counts.get(w_str, 0) + 1
+            return counts
+
+        def get_error_types(record_list):
+            counts = {}
+            for r in record_list:
+                err = r.get('error_type')
+                if err and err != "benar":
+                    counts[err] = counts.get(err, 0) + 1
+            return counts
+
+        writing_wrong_letters = get_wrong_letters(writing_records)
+        spelling_wrong_letters = get_wrong_letters(spelling_records)
+
+        writing_errors = get_error_types(writing_records)
+        spelling_errors = get_error_types(spelling_records)
 
         strengths = []
         weaknesses = []
 
-        # Analisis Akurasi
-        if avg_accuracy >= 80:
-            strengths.append(f"Akurasi menulis sangat baik mencapai {avg_accuracy:.0f}%.")
-        elif avg_accuracy >= 60:
-            strengths.append(f"Akurasi menulis cukup baik ({avg_accuracy:.0f}%), namun masih bisa dimaksimalkan.")
-        else:
-            weaknesses.append(f"Akurasi menulis perlu ditingkatkan (saat ini {avg_accuracy:.0f}%).")
-
-        # Analisis Huruf Tersulit
-        most_wrong_letter = None
-        if wrong_letters_count:
-            most_wrong_letter = max(wrong_letters_count, key=wrong_letters_count.get)
-            weaknesses.append(f"Sering terbalik/kesulitan saat menulis huruf {most_wrong_letter}.")
-        
-        # Analisis Tipe Kesalahan
-        if error_types_count:
-            most_common_error = max(error_types_count, key=error_types_count.get)
-            formatted_error = most_common_error.replace('_', ' ')
-            weaknesses.append(f"Tipe kesalahan dominan: {formatted_error}.")
-        else:
-            if avg_accuracy > 90:
+        # Analisis Menulis
+        if writing_records:
+            if writing_accuracy >= 80:
+                strengths.append(f"Akurasi menulis sangat baik mencapai {writing_accuracy:.0f}%.")
+            elif writing_accuracy >= 60:
+                strengths.append(f"Akurasi menulis cukup baik ({writing_accuracy:.0f}%), namun masih bisa dimaksimalkan.")
+            else:
+                weaknesses.append(f"Akurasi menulis perlu ditingkatkan (saat ini {writing_accuracy:.0f}%).")
+            
+            if writing_wrong_letters:
+                most_wrong_writing = max(writing_wrong_letters, key=writing_wrong_letters.get)
+                weaknesses.append(f"Sering terbalik/kesulitan saat menulis huruf {most_wrong_writing}.")
+            
+            if writing_errors:
+                most_common_w_err = max(writing_errors, key=writing_errors.get).replace('_', ' ')
+                weaknesses.append(f"Tipe kesalahan penulisan dominan: {most_common_w_err}.")
+            elif writing_accuracy > 90:
                 strengths.append("Hampir tidak ada kesalahan bentuk dalam penulisan.")
 
-        # Pesan AI Executive Summary
-        if most_wrong_letter:
-            ai_recommendation = f"Halo Ayah/Bunda! Ananda menunjukkan semangat belajar yang tinggi. Saat ini, Ananda butuh sedikit bimbingan ekstra untuk melatih bentuk huruf {most_wrong_letter}. Yuk, temani Ananda berlatih menulis huruf tersebut di rumah!"
-        elif avg_accuracy >= 80:
-            ai_recommendation = "Halo Ayah/Bunda! Perkembangan belajar Ananda sungguh luar biasa! Keterampilan menulisnya sudah sangat rapi dan akurat. Terus berikan pujian untuk menjaga semangatnya ya!"
-        else:
-            ai_recommendation = "Halo Ayah/Bunda! Ananda sedang dalam tahap beradaptasi dengan bentuk huruf. Dampingi Ananda dan gunakan fitur 'Latihan Menulis' agar otot motoriknya semakin terbiasa."
+        # Analisis Mengeja
+        if spelling_records:
+            if spelling_accuracy >= 80:
+                strengths.append(f"Akurasi mengeja sangat baik mencapai {spelling_accuracy:.0f}%.")
+            elif spelling_accuracy >= 60:
+                strengths.append(f"Akurasi mengeja cukup baik ({spelling_accuracy:.0f}%), terus tingkatkan.")
+            else:
+                weaknesses.append(f"Akurasi mengeja perlu ditingkatkan (saat ini {spelling_accuracy:.0f}%).")
+            
+            if spelling_wrong_letters:
+                most_wrong_spelling = max(spelling_wrong_letters, key=spelling_wrong_letters.get)
+                weaknesses.append(f"Sering kesulitan saat mengeja huruf/suku kata {most_wrong_spelling}.")
+            
+            if spelling_errors:
+                most_common_s_err = max(spelling_errors, key=spelling_errors.get).replace('_', ' ')
+                weaknesses.append(f"Tipe kesalahan ejaan dominan: {most_common_s_err}.")
 
-        # Ekstrak data trend akurasi (maksimal 10 ujian terakhir)
+        # Pesan AI Executive Summary
+        ai_recommendation = "Halo Ayah/Bunda! Perkembangan belajar Ananda sungguh luar biasa! "
+        if writing_wrong_letters and spelling_wrong_letters:
+            most_wrong_writing = max(writing_wrong_letters, key=writing_wrong_letters.get)
+            most_wrong_spelling = max(spelling_wrong_letters, key=spelling_wrong_letters.get)
+            ai_recommendation = f"Halo Ayah/Bunda! Ananda menunjukkan semangat yang tinggi. Saat ini, Ananda butuh bimbingan ekstra untuk melatih penulisan {most_wrong_writing} dan ejaan {most_wrong_spelling}. Yuk, temani Ananda berlatih di rumah!"
+        elif writing_wrong_letters:
+            most_wrong_writing = max(writing_wrong_letters, key=writing_wrong_letters.get)
+            ai_recommendation = f"Halo Ayah/Bunda! Ananda sangat hebat dalam mengeja, tapi butuh sedikit bimbingan ekstra untuk melatih bentuk tulisan {most_wrong_writing}. Yuk berlatih menulis lebih sering!"
+        elif spelling_wrong_letters:
+            most_wrong_spelling = max(spelling_wrong_letters, key=spelling_wrong_letters.get)
+            ai_recommendation = f"Halo Ayah/Bunda! Tulisan Ananda sudah rapi, tapi masih sering kesulitan saat mengeja {most_wrong_spelling}. Yuk, ajak Ananda berlatih melafalkan ejaan bersama!"
+        elif writing_accuracy >= 80 and spelling_accuracy >= 80:
+            ai_recommendation = "Halo Ayah/Bunda! Perkembangan belajar Ananda sungguh luar biasa! Keterampilan menulis dan mengejanya sudah sangat rapi dan akurat. Terus berikan pujian untuk menjaga semangatnya ya!"
+        else:
+            ai_recommendation = "Halo Ayah/Bunda! Ananda sedang dalam tahap beradaptasi dengan bentuk huruf dan pelafalannya. Dampingi Ananda dan gunakan fitur 'Latihan' agar semakin lancar."
+
+        # Ekstrak data trend akurasi gabungan (maksimal 10 ujian terakhir)
         accuracy_trend = [r.get('accuracy_score', 0) for r in records[-10:]]
 
         return jsonify({
             "status": "success",
             "data": {
-                # Urutan: Menulis, Mengeja, Observasi, Duel (Hanya fitur yang ada di app)
-                "skills": [avg_accuracy, 75, 80, 85],
+                # Urutan: Menulis, Mengeja, Observasi, Duel
+                "skills": [writing_accuracy, spelling_accuracy, 80, 85],
                 "ai_recommendation": ai_recommendation,
                 "strengths": strengths,
                 "weaknesses": weaknesses,
