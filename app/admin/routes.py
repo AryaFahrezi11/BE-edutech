@@ -312,7 +312,9 @@ def api_scrape():
 
     for app_id in app_ids:
         try:
-            result = scrape_app_reviews(app_id, count=50)
+            # Mengurangi jumlah ulasan dari 50 menjadi 30 agar lebih cepat diproses
+            # di server Render (menghindari timeout)
+            result = scrape_app_reviews(app_id, count=30)
             # Preprocessing
             if "reviews" in result:
                 result["analysis"] = preprocess_reviews(result["reviews"])
