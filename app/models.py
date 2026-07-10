@@ -47,6 +47,12 @@ class UserProgress:
         except Exception:
             missions_list = []
 
+        completed_hunt_items = doc.get("completed_hunt_items")
+        try:
+            hunt_items_list = json.loads(completed_hunt_items) if completed_hunt_items else []
+        except Exception:
+            hunt_items_list = []
+
         return {
             "total_points": doc.get("total_points", 0),
             "streak_days": doc.get("streak_days", 0),
@@ -57,8 +63,11 @@ class UserProgress:
             "unlocked_writing_word": doc.get("unlocked_writing_word", 0),
             "unlocked_spelling_letter": doc.get("unlocked_spelling_letter", 0),
             "unlocked_spelling_word": doc.get("unlocked_spelling_word", 0),
+            "unlocked_spelling_exam_letter": doc.get("unlocked_spelling_exam_letter", 0),
+            "unlocked_spelling_exam_word": doc.get("unlocked_spelling_exam_word", 0),
             "current_mission_index": doc.get("current_mission_index", 0),
             "completed_missions": missions_list,
+            "completed_hunt_items": hunt_items_list,
         }
 
 

@@ -258,8 +258,11 @@ def sync_progress():
                 "unlocked_writing_word": 0,
                 "unlocked_spelling_letter": 0,
                 "unlocked_spelling_word": 0,
+                "unlocked_spelling_exam_letter": 0,
+                "unlocked_spelling_exam_word": 0,
                 "current_mission_index": 0,
                 "completed_missions": json.dumps([]),
+                "completed_hunt_items": json.dumps([]),
             }
             progress_col.insert_one(base)
             progress_doc = base
@@ -284,11 +287,17 @@ def sync_progress():
             update_fields['unlocked_spelling_letter'] = data['unlocked_spelling_letter']
         if 'unlocked_spelling_word' in data:
             update_fields['unlocked_spelling_word'] = data['unlocked_spelling_word']
+        if 'unlocked_spelling_exam_letter' in data:
+            update_fields['unlocked_spelling_exam_letter'] = data['unlocked_spelling_exam_letter']
+        if 'unlocked_spelling_exam_word' in data:
+            update_fields['unlocked_spelling_exam_word'] = data['unlocked_spelling_exam_word']
 
         if 'current_mission_index' in data:
             update_fields['current_mission_index'] = data['current_mission_index']
         if 'completed_missions' in data:
             update_fields['completed_missions'] = json.dumps(data['completed_missions'])
+        if 'completed_hunt_items' in data:
+            update_fields['completed_hunt_items'] = json.dumps(data['completed_hunt_items'])
 
         if update_fields:
             progress_col.update_one({"user_id": user_id}, {"$set": update_fields})
@@ -572,12 +581,20 @@ def get_raport():
 
         writing_records = [r for r in records if r.get('mode') == 'writing']
         spelling_records = [r for r in records if r.get('mode') == 'spelling']
+        observasi_records = [r for r in records if r.get('mode') == 'observasi']
+        duel_records = [r for r in records if r.get('mode') == 'duel']
         
         # Akurasi Menulis
         writing_accuracy = sum(r.get('accuracy_score', 0) for r in writing_records) / len(writing_records) if writing_records else 0
         
         # Akurasi Mengeja
         spelling_accuracy = sum(r.get('accuracy_score', 0) for r in spelling_records) / len(spelling_records) if spelling_records else 0
+
+        # Akurasi Observasi
+        observasi_accuracy = sum(r.get('accuracy_score', 0) for r in observasi_records) / len(observasi_records) if observasi_records else 0
+
+        # Akurasi Duel
+        duel_accuracy = sum(r.get('accuracy_score', 0) for r in duel_records) / len(duel_records) if duel_records else 0
 
         def get_wrong_letters(record_list):
             counts = {}
@@ -641,6 +658,20 @@ def get_raport():
                 most_common_s_err = max(spelling_errors, key=spelling_errors.get).replace('_', ' ')
                 weaknesses.append(f"Tipe kesalahan ejaan dominan: {most_common_s_err}.")
 
+        # Analisis Observasi
+        if observasi_records:
+            if observasi_accuracy >= 80:
+                strengths.append(f"Fokus dan kemampuan observasi benda sangat baik ({observasi_accuracy:.0f}%).")
+            else:
+                weaknesses.append(f"Fokus observasi perlu dilatih lagi (saat ini {observasi_accuracy:.0f}%).")
+
+        # Analisis Duel
+        if duel_records:
+            if duel_accuracy >= 50:
+                strengths.append(f"Tangkas dalam kompetisi duel multiplayer ({duel_accuracy:.0f}% kemenangan/seri).")
+            else:
+                weaknesses.append(f"Kecepatan menyusun kata di mode duel perlu ditingkatkan.")
+
         # Pesan AI Executive Summary
         ai_recommendation = "Halo Ayah/Bunda! Perkembangan belajar Ananda sungguh luar biasa! "
         if writing_wrong_letters and spelling_wrong_letters:
@@ -665,7 +696,7 @@ def get_raport():
             "status": "success",
             "data": {
                 # Urutan: Menulis, Mengeja, Observasi, Duel
-                "skills": [writing_accuracy, spelling_accuracy, 80, 85],
+                "skills": [writing_accuracy, spelling_accuracy, observasi_accuracy, duel_accuracy],
                 "ai_recommendation": ai_recommendation,
                 "strengths": strengths,
                 "weaknesses": weaknesses,
