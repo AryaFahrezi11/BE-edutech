@@ -11,8 +11,6 @@ import PIL.Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.extensions import db  # MongoDB handle
 from app.models import User, UserProgress, ActivityLog
-
-from app.ai.predictor import predict_image
 import smtplib
 import random
 from email.mime.text import MIMEText
@@ -880,26 +878,6 @@ def get_raport():
     except Exception as e:
         print(f"Error saat mengambil raport: {e}")
         return jsonify({"error": str(e)}), 500
-        return jsonify({"status": "error", "message": f"Gagal memperbarui profil: {str(e)}"}), 500
-
-
-@main.route('/api/predict', methods=['POST'])
-def predict_handwriting():
-    if 'gambar' not in request.files:
-        return jsonify({"status": "error", "message": "File gambar tidak ditemukan"}), 400
-
-    try:
-        file = request.files['gambar']
-        result = predict_image(file)
-
-        return jsonify({
-            "status": "success",
-            "prediction": result["prediction"],
-            "confidence": result["confidence"]
-        }), 200
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # ─────────────────────────────────────────────────────────────────────────────
