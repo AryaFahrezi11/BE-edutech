@@ -9,21 +9,13 @@ try:
 except ImportError:
     GP_SCRAPER_AVAILABLE = False
 
-# Daftar aplikasi kompetitor yang tersedia
-COMPETITOR_APPS = {
-    "com.ayoapps.marbel.alphabetfun": "Marbel - Belajar Membaca",
-    "com.duolingo": "Duolingo",
-    "org.khanacademy.kids": "Khan Academy Kids",
-    "com.ruangguru.app": "Ruangguru",
-    "com.lingokids": "Lingokids",
-}
-
+from app.admin.playstore_apps import PLAYSTORE_APPS
 
 def get_competitor_list():
     """Mengembalikan daftar aplikasi kompetitor."""
     return [
-        {"app_id": app_id, "name": name}
-        for app_id, name in COMPETITOR_APPS.items()
+        {"app_id": data["package"], "name": data["name"]}
+        for key, data in PLAYSTORE_APPS.items()
     ]
 
 
@@ -46,7 +38,8 @@ def scrape_app_reviews(app_id: str, count: int = 50, lang: str = "id", country: 
             "Jalankan: pip install google-play-scraper"
         )
 
-    app_name = COMPETITOR_APPS.get(app_id, app_id)
+    # Cari app_name dari PLAYSTORE_APPS berdasarkan package (app_id)
+    app_name = next((data["name"] for data in PLAYSTORE_APPS.values() if data["package"] == app_id), app_id)
 
     # Coba dengan bahasa Indonesia dahulu, fallback ke English jika gagal
     result = []

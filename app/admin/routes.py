@@ -299,6 +299,7 @@ def api_users():
 @login_required
 def api_scrape():
     from app.admin.scraper import scrape_app_reviews
+    from app.admin.preprocessing import preprocess_reviews
 
     data = request.get_json() or {}
     app_ids = data.get("app_ids", [])
@@ -312,6 +313,9 @@ def api_scrape():
     for app_id in app_ids:
         try:
             result = scrape_app_reviews(app_id, count=50)
+            # Preprocessing
+            if "reviews" in result:
+                result["analysis"] = preprocess_reviews(result["reviews"])
             results[app_id] = result
         except Exception as e:
             errors[app_id] = str(e)
@@ -334,6 +338,27 @@ def api_scrape():
         "results": results,
         "errors": errors,
     })
+
+
+@admin.route("/api/latest-scrape", methods=["GET"])
+@login_required
+def api_latest_scrape():
+    try:
+        db = get_db()
+        # Cari data scraping terakhir
+        latest = db["competitor_scrapes"].find_one(
+            {}, sort=[("timestamp", -1)]
+        )
+        if latest:
+            # Hapus _id agar bisa di-serialize ke JSON
+            latest.pop("_id", None)
+            return jsonify({
+                "status": "success",
+                "data": latest
+            })
+        return jsonify({"status": "empty", "data": None})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ─────────────────────────────────────────────
