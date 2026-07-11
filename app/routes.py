@@ -260,6 +260,9 @@ def sync_progress():
                 "unlocked_spelling_word": 0,
                 "unlocked_spelling_exam_letter": 0,
                 "unlocked_spelling_exam_word": 0,
+                "unlocked_writing_exam_letter": 0,
+                "unlocked_writing_exam_lowercase": 0,
+                "unlocked_writing_exam_word": 0,
                 "current_mission_index": 0,
                 "completed_missions": json.dumps([]),
                 "completed_hunt_items": json.dumps([]),
@@ -291,6 +294,12 @@ def sync_progress():
             update_fields['unlocked_spelling_exam_letter'] = data['unlocked_spelling_exam_letter']
         if 'unlocked_spelling_exam_word' in data:
             update_fields['unlocked_spelling_exam_word'] = data['unlocked_spelling_exam_word']
+        if 'unlocked_writing_exam_letter' in data:
+            update_fields['unlocked_writing_exam_letter'] = data['unlocked_writing_exam_letter']
+        if 'unlocked_writing_exam_lowercase' in data:
+            update_fields['unlocked_writing_exam_lowercase'] = data['unlocked_writing_exam_lowercase']
+        if 'unlocked_writing_exam_word' in data:
+            update_fields['unlocked_writing_exam_word'] = data['unlocked_writing_exam_word']
 
         if 'current_mission_index' in data:
             update_fields['current_mission_index'] = data['current_mission_index']
@@ -348,6 +357,11 @@ def get_progress():
                 "unlocked_writing_word": 0,
                 "unlocked_spelling_letter": 0,
                 "unlocked_spelling_word": 0,
+                "unlocked_spelling_exam_letter": 0,
+                "unlocked_spelling_exam_word": 0,
+                "unlocked_writing_exam_letter": 0,
+                "unlocked_writing_exam_lowercase": 0,
+                "unlocked_writing_exam_word": 0,
                 "current_mission_index": 0,
                 "completed_missions": json.dumps([]),
             }
