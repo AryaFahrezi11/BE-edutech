@@ -7,6 +7,10 @@
   ],
   "routes": [
     {
+      "src": "/static/(.*)",
+      "dest": "run.py"
+    },
+    {
       "src": "/(.*)",
       "dest": "run.py"
     }

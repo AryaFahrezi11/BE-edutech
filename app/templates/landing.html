@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="EduTech — Aplikasi belajar anak berbasis AI. Latihan menulis, mengeja, dan eksplorasi benda dengan teknologi AI interaktif. Download gratis sekarang!">
+  <meta name="keywords" content="edutech, aplikasi belajar anak, AI pendidikan, latihan menulis, mengeja, gamifikasi">
+  <meta name="author" content="EduTech Team">
+
+  <title>EduTech — Aplikasi Belajar Anak Berbasis AI</title>
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+  <!-- Animated Background Blobs -->
+  <div class="bg-blob bg-blob--1"></div>
+  <div class="bg-blob bg-blob--2"></div>
+  <div class="bg-blob bg-blob--3"></div>
+
+  <!-- ============================================
+       NAVBAR
+       ============================================ -->
+  <nav class="navbar" id="navbar">
+    <div class="container">
+      <a href="#" class="navbar__logo">
+        <span class="navbar__logo-icon">📚</span>
+        EduTech
+      </a>
+
+      <div class="navbar__links" id="navLinks">
+        <a href="#features" class="navbar__link">Fitur</a>
+        <a href="#how-it-works" class="navbar__link">Cara Kerja</a>
+        <a href="#preview" class="navbar__link">Preview</a>
+        <a href="#ai" class="navbar__link">AI</a>
+        <a href="#download" class="navbar__cta">
+          ⬇️ Download
+        </a>
+      </div>
+
+      <div class="navbar__hamburger" id="hamburger">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+  </nav>
+  <div class="navbar__overlay" id="navOverlay"></div>
+
+  <!-- ============================================
+       HERO SECTION
+       ============================================ -->
+  <section class="hero" id="hero">
+    <div class="container">
+      <div class="hero__content">
+        <div class="hero__badge">
+          <span class="hero__badge-dot"></span>
+          Aplikasi Belajar #1 untuk Anak
+        </div>
+
+        <h1 class="hero__title">
+          Belajar Jadi Seru<br>
+          dengan <span>AI Interaktif</span>
+        </h1>
+
+        <p class="hero__subtitle">
+          EduTech mengubah cara anak belajar menulis, mengeja, dan mengenal benda 
+          menjadi petualangan seru yang didukung oleh teknologi AI — 
+          seperti bermain game! 🎮
+        </p>
+
+        <div class="hero__actions">
+          <a href="#download" class="btn btn--primary">
+            ⬇️ Download Gratis
+          </a>
+          <a href="#features" class="btn btn--outline">
+            ✨ Lihat Fitur
+          </a>
+        </div>
+
+        <div class="hero__stats">
+          <div class="hero__stat">
+            <div class="hero__stat-value">13+</div>
+            <div class="hero__stat-label">Misi Belajar</div>
+          </div>
+          <div class="hero__stat">
+            <div class="hero__stat-value">AI</div>
+            <div class="hero__stat-label">Powered</div>
+          </div>
+          <div class="hero__stat">
+            <div class="hero__stat-value">100%</div>
+            <div class="hero__stat-label">Gratis</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero__visual">
+        <div class="hero__phone-wrapper">
+          <div class="hero__phone-frame">
+            <div class="hero__phone-notch"></div>
+            <img src="{{ url_for('static', filename='images/screenshot_home.png') }}" alt="EduTech App - Peta Misi">
+          </div>
+
+          <!-- Floating cards -->
+          <div class="hero__float hero__float--1">
+            <div class="hero__float-icon" style="background: #E8F5E9;">✏️</div>
+            <div>
+              <div style="font-size: 0.8rem; color: #9CA3AF;">Menulis</div>
+              <div style="color: #11998E;">A B C</div>
+            </div>
+          </div>
+
+          <div class="hero__float hero__float--2">
+            <div class="hero__float-icon" style="background: #FFF3E0;">⭐</div>
+            <div>
+              <div style="font-size: 0.8rem; color: #9CA3AF;">Bintang</div>
+              <div style="color: #FF9F1C;">+50 pts</div>
+            </div>
+          </div>
+
+          <div class="hero__float hero__float--3">
+            <div class="hero__float-icon" style="background: #EDE7F6;">🎤</div>
+            <div>
+              <div style="font-size: 0.8rem; color: #9CA3AF;">Mengeja</div>
+              <div style="color: #6C63FF;">Benar!</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       FEATURES SECTION
+       ============================================ -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-badge section-badge--blue">✨ Fitur Unggulan</div>
+        <h2 class="section-title">Semua yang Anak Butuhkan untuk Belajar</h2>
+        <p class="section-subtitle">
+          Dari menulis huruf hingga mengenal benda, semuanya dikemas dalam petualangan interaktif yang menyenangkan.
+        </p>
+      </div>
+
+      <div class="features__grid">
+        <!-- Card 1 -->
+        <div class="feature-card reveal reveal-delay-1">
+          <div class="feature-card__icon" style="background: #EDE7F6;">✏️</div>
+          <h3 class="feature-card__title">Latihan Menulis Huruf</h3>
+          <p class="feature-card__desc">
+            Belajar menulis huruf kapital A-Z dan huruf kecil a-z dengan panduan interaktif. AI akan menilai tulisan tangan anak secara real-time.
+          </p>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="feature-card reveal reveal-delay-2">
+          <div class="feature-card__icon" style="background: #FFF3E0;">⚔️</div>
+          <h3 class="feature-card__title">Ujian Seru</h3>
+          <p class="feature-card__desc">
+            Tantangan ujian yang menguji kemampuan anak dengan format yang menyenangkan. Selesaikan ujian dan kumpulkan bintang! ⭐
+          </p>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="feature-card reveal reveal-delay-3">
+          <div class="feature-card__icon" style="background: #E8F5E9;">🎤</div>
+          <h3 class="feature-card__title">Mengeja dengan Suara</h3>
+          <p class="feature-card__desc">
+            Latihan mengeja huruf dan kata dengan Text-to-Speech. Anak mendengar ejaan yang benar langsung dari AI dan bisa berlatih kapan saja.
+          </p>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="feature-card reveal reveal-delay-4">
+          <div class="feature-card__icon" style="background: #FCE4EC;">🔍</div>
+          <h3 class="feature-card__title">Detektif Benda</h3>
+          <p class="feature-card__desc">
+            Gunakan kamera untuk memindai benda di sekitar. AI akan mengenali objek dan memberikan informasi edukatif tentang benda tersebut.
+          </p>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="feature-card reveal reveal-delay-5">
+          <div class="feature-card__icon" style="background: #F3E5F5;">🏆</div>
+          <h3 class="feature-card__title">Leaderboard & Gamifikasi</h3>
+          <p class="feature-card__desc">
+            Sistem poin, bintang, dan papan peringkat untuk memotivasi anak terus belajar. Semakin rajin, semakin tinggi levelnya!
+          </p>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="feature-card reveal reveal-delay-6">
+          <div class="feature-card__icon" style="background: #E8F5FE;">⚡</div>
+          <h3 class="feature-card__title">Arena Duel Multiplayer</h3>
+          <p class="feature-card__desc">
+            Ajak teman untuk duel mengeja dan berburu benda! Mode multiplayer yang seru dan kompetitif untuk belajar bersama.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       HOW IT WORKS SECTION
+       ============================================ -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-badge section-badge--orange">🚀 Cara Kerja</div>
+        <h2 class="section-title">Mulai Petualangan Belajar dalam 4 Langkah</h2>
+        <p class="section-subtitle">
+          Semudah mengunduh dan langsung bermain — tanpa ribet!
+        </p>
+      </div>
+
+      <div class="steps__grid">
+        <div class="step-card reveal reveal-delay-1">
+          <div class="step-card__number">1</div>
+          <h3 class="step-card__title">Download Aplikasi</h3>
+          <p class="step-card__desc">Unduh EduTech dari link yang tersedia, gratis tanpa biaya.</p>
+        </div>
+
+        <div class="step-card reveal reveal-delay-2">
+          <div class="step-card__number">2</div>
+          <h3 class="step-card__title">Buat Akun Anak</h3>
+          <p class="step-card__desc">Daftarkan profil anak dengan avatar lucu dan nama panggilan.</p>
+        </div>
+
+        <div class="step-card reveal reveal-delay-3">
+          <div class="step-card__number">3</div>
+          <h3 class="step-card__title">Mulai Misi Belajar</h3>
+          <p class="step-card__desc">Ikuti peta misi dari level 1 — selesaikan latihan dan ujian seru.</p>
+        </div>
+
+        <div class="step-card reveal reveal-delay-4">
+          <div class="step-card__number">4</div>
+          <h3 class="step-card__title">Raih Bintang!</h3>
+          <p class="step-card__desc">Kumpulkan bintang, naik level, dan jadilah juara di Leaderboard!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       APP PREVIEW SECTION
+       ============================================ -->
+  <section class="app-preview" id="preview">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-badge section-badge--purple">📱 Preview Aplikasi</div>
+        <h2 class="section-title">Intip Tampilan EduTech</h2>
+        <p class="section-subtitle">
+          Desain yang ramah anak dengan warna-warna cerah dan navigasi yang mudah digunakan.
+        </p>
+      </div>
+
+      <div class="app-preview__showcase reveal">
+        <div>
+          <div class="app-preview__phone">
+            <img src="{{ url_for('static', filename='images/screenshot_features.png') }}" alt="EduTech - Latihan Menulis">
+          </div>
+          <div class="app-preview__label">✏️ Latihan Menulis</div>
+        </div>
+
+        <div>
+          <div class="app-preview__phone app-preview__phone--center">
+            <img src="{{ url_for('static', filename='images/screenshot_home.png') }}" alt="EduTech - Peta Misi">
+          </div>
+          <div class="app-preview__label">🗺️ Peta Misi</div>
+        </div>
+
+        <div>
+          <div class="app-preview__phone">
+            <img src="{{ url_for('static', filename='images/screenshot_multiplayer.png') }}" alt="EduTech - Arena Duel">
+          </div>
+          <div class="app-preview__label">⚔️ Arena Duel</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       AI SECTION
+       ============================================ -->
+  <section class="ai-section" id="ai">
+    <div class="container">
+      <div class="ai-section__visual reveal">
+        <div class="ai-section__card">
+          <span class="ai-section__card-emoji">🤖</span>
+          <h3 class="ai-section__card-title">Didukung oleh Google Gemini AI</h3>
+          <div class="ai-section__card-features">
+            <div class="ai-section__card-feature">
+              <span class="ai-section__card-feature-dot"></span>
+              Analisis tulisan tangan secara real-time
+            </div>
+            <div class="ai-section__card-feature">
+              <span class="ai-section__card-feature-dot"></span>
+              Pengenalan objek lewat kamera (Object Detection)
+            </div>
+            <div class="ai-section__card-feature">
+              <span class="ai-section__card-feature-dot"></span>
+              Text-to-Speech untuk panduan belajar
+            </div>
+            <div class="ai-section__card-feature">
+              <span class="ai-section__card-feature-dot"></span>
+              Feedback instan & personal untuk setiap anak
+            </div>
+            <div class="ai-section__card-feature">
+              <span class="ai-section__card-feature-dot"></span>
+              Konten edukatif yang di-generate oleh AI
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-section__content reveal reveal-delay-2">
+        <div class="section-header">
+          <div class="section-badge section-badge--purple">🧠 Teknologi AI</div>
+          <h2 class="section-title">Belajar Lebih Pintar dengan AI</h2>
+          <p class="section-subtitle">
+            EduTech menggunakan teknologi AI terdepan dari Google Gemini untuk memberikan 
+            pengalaman belajar yang personal dan interaktif bagi setiap anak.
+          </p>
+        </div>
+
+        <p style="color: var(--text-secondary); font-weight: 600; line-height: 1.8;">
+          Setiap tulisan tangan anak akan dianalisis secara real-time oleh AI, memberikan 
+          umpan balik yang akurat dan motivasi positif. Fitur Object Detection memungkinkan 
+          anak mengarahkan kamera ke benda di sekitarnya dan AI akan langsung mengenali serta 
+          memberikan informasi edukatif tentang benda tersebut — semuanya dalam Bahasa Indonesia! 🇮🇩
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       CTA / DOWNLOAD SECTION
+       ============================================ -->
+  <section class="cta-section" id="download">
+    <div class="container">
+      <div class="cta-section__card reveal">
+        <span class="cta-section__emoji">📲</span>
+        <h2 class="cta-section__title">Siap Mulai Petualangan Belajar?</h2>
+        <p class="cta-section__subtitle">
+          Download EduTech sekarang dan biarkan anak kamu belajar sambil bermain 
+          dengan teknologi AI yang menyenangkan!
+        </p>
+
+        <div class="cta-section__buttons">
+          <a href="#" class="btn btn--white" id="downloadBtn">
+            ⬇️ Download APK
+          </a>
+          <a href="#features" class="btn btn--ghost">
+            ✨ Pelajari Lebih Lanjut
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================
+       FOOTER
+       ============================================ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer__grid">
+        <div>
+          <div class="footer__brand-name">
+            <span>📚</span> EduTech
+          </div>
+          <p class="footer__brand-desc">
+            Aplikasi belajar anak berbasis AI yang mengubah proses belajar menjadi petualangan seru dan interaktif. 
+            Dibuat dengan ❤️ untuk anak-anak Indonesia.
+          </p>
+        </div>
+
+        <div>
+          <h4 class="footer__col-title">Fitur</h4>
+          <a href="#features" class="footer__link">Menulis Huruf</a>
+          <a href="#features" class="footer__link">Mengeja Kata</a>
+          <a href="#features" class="footer__link">Detektif Benda</a>
+          <a href="#features" class="footer__link">Arena Duel</a>
+        </div>
+
+        <div>
+          <h4 class="footer__col-title">Halaman</h4>
+          <a href="#hero" class="footer__link">Beranda</a>
+          <a href="#features" class="footer__link">Fitur</a>
+          <a href="#how-it-works" class="footer__link">Cara Kerja</a>
+          <a href="#download" class="footer__link">Download</a>
+        </div>
+
+        <div>
+          <h4 class="footer__col-title">Kontak</h4>
+          <a href="mailto:edutech@gmail.com" class="footer__link">📧 edutech@gmail.com</a>
+          <a href="#" class="footer__link">📍 Indonesia</a>
+        </div>
+      </div>
+
+      <div class="footer__bottom">
+        <span>&copy; 2026 EduTech. All rights reserved.</span>
+        <div class="footer__socials">
+          <a href="#" class="footer__social" title="Instagram">📷</a>
+          <a href="#" class="footer__social" title="YouTube">▶️</a>
+          <a href="#" class="footer__social" title="GitHub">💻</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ============================================
+       JAVASCRIPT
+       ============================================ -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

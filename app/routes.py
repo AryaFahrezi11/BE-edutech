@@ -4,7 +4,7 @@ import json
 import re
 import jwt
 import datetime
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, render_template
 from google import genai
 from google.genai import types
 import PIL.Image
@@ -50,6 +50,12 @@ def _get_next_counter_seq(counter_name: str) -> int:
         return_document=True,
     )
     return int(counter.get("seq", 0))
+
+
+@main.route('/')
+def landing_page():
+    """Landing page — mengenalkan aplikasi EduTech"""
+    return render_template('landing.html')
 
 
 @main.route('/api/login', methods=['POST'])
