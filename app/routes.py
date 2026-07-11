@@ -229,6 +229,98 @@ def verify_otp():
         return jsonify({"status": "error", "message": f"Gagal memverifikasi: {str(e)}"}), 500
 
 
+@main.route('/api/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({"status": "error", "message": "Email wajib diisi!"}), 400
+
+    try:
+        users_col = db[User.COLLECTION]
+        user_doc = users_col.find_one({"email": email.strip().lower()})
+
+        if not user_doc:
+            return jsonify({"status": "error", "message": "Email tidak terdaftar!"}), 404
+
+        kode_otp = str(random.randint(100000, 999999))
+        
+        users_col.update_one(
+            {"_id": user_doc.get("_id")},
+            {"$set": {"reset_otp": kode_otp, "updated_at": _now_ts_str()}}
+        )
+
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = email
+        msg['Subject'] = "Reset Password Edutech Kamu! 🔑"
+
+        body = f"""
+        Halo {user_doc.get('nama_lengkap', 'Petualang')}! 👋
+
+        Kami menerima permintaan untuk mereset password akun Edutech kamu.
+        Gunakan 6 digit Kode Rahasia di bawah ini untuk mereset password:
+
+        {kode_otp}
+
+        Jika kamu tidak meminta reset password, abaikan saja email ini.
+        Jangan berikan kode ini ke siapapun ya.
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+
+        return jsonify({"status": "success", "message": "Kode OTP reset password telah dikirim ke email kamu."}), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal mengirim email reset: {str(e)}"}), 500
+
+
+@main.route('/api/reset-password', methods=['POST'])
+def reset_password():
+    data = request.get_json()
+    email = data.get('email')
+    otp_input = data.get('otp')
+    new_password = data.get('new_password')
+    konfirmasi = data.get('konfirmasi_password')
+
+    if not all([email, otp_input, new_password, konfirmasi]):
+        return jsonify({"status": "error", "message": "Semua kolom wajib diisi!"}), 400
+        
+    if new_password != konfirmasi:
+        return jsonify({"status": "error", "message": "Password baru dan konfirmasi tidak cocok!"}), 400
+        
+    if len(new_password) < 6:
+        return jsonify({"status": "error", "message": "Password minimal 6 karakter!"}), 400
+
+    try:
+        users_col = db[User.COLLECTION]
+        user_doc = users_col.find_one({"email": email.strip().lower()})
+
+        if not user_doc:
+            return jsonify({"status": "error", "message": "User tidak ditemukan!"}), 404
+
+        if user_doc.get('reset_otp') != otp_input:
+            return jsonify({"status": "error", "message": "Kode rahasia salah, coba lagi ya!"}), 400
+
+        hashed_password = generate_password_hash(new_password)
+        
+        users_col.update_one(
+            {"_id": user_doc.get("_id")},
+            {"$set": {"password": hashed_password, "reset_otp": None, "updated_at": _now_ts_str()}}
+        )
+
+        return jsonify({"status": "success", "message": "Hore! Password berhasil diubah. Silakan Login dengan password baru."}), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gagal mereset password: {str(e)}"}), 500
+
+
 @main.route('/api/sync-progress', methods=['POST'])
 def sync_progress():
     data = request.get_json()
