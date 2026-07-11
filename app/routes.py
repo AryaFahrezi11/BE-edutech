@@ -348,7 +348,105 @@ def reset_password():
         return jsonify({"status": "success", "message": "Hore! Password berhasil diubah. Silakan Login dengan password baru."}), 200
 
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Gagal mereset password: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"Gagal memverifikasi: {str(e)}"}), 500
+
+
+@main.route('/api/evaluate-ai', methods=['POST'])
+def evaluate_ai():
+    data = request.get_json()
+    target_word = data.get('targetWord')
+    input_word = data.get('inputWord')
+    mode = data.get('mode')  # 'writing' atau 'spelling'
+
+    if not all([target_word, input_word, mode]):
+        return jsonify({"status": "error", "message": "Data tidak lengkap"}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"status": "error", "message": "API Key Gemini belum diatur di backend"}), 500
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
+
+        if mode == 'writing':
+            prompt = f'''
+Kamu adalah guru TK yang sedang mengevaluasi ujian menulis anak berusia 5-7 tahun.
+Anak diminta menulis huruf atau kata: "{target_word}".
+Namun, AI pembaca tulisan membaca tulisan anak tersebut sebagai: "{input_word}".
+
+Tugasmu:
+1. Buat "voice_feedback" berupa kalimat penyemangat singkat dalam Bahasa Indonesia. Jika tulisannya salah total atau ada huruf yang tertukar, beritahu huruf apa yang salah dengan bahasa yang sangat lembut dan ceria (Maksimal 2 kalimat). Jika sudah lumayan mirip, puji dia.
+2. Buat "analytics_data" untuk laporan orang tua (Big Data). Tentukan huruf apa saja yang kemungkinan salah ditulis (wrong_letters), jenis kesalahannya (error_type: "kesalahan_bentuk", "typo", "tidak_terbaca"), dan berikan estimasi accuracy_score (0-100).
+
+Kembalikan WAJIB dalam format JSON yang valid persis seperti skema berikut ini:
+{{
+  "voice_feedback": "Wah hampir benar! Tapi coba perhatikan lagi huruf depannya...",
+  "analytics_data": {{
+    "target_word": "{target_word}",
+    "written_word": "{input_word}",
+    "wrong_letters": ["huruf yang salah"],
+    "error_type": "kesalahan_bentuk",
+    "accuracy_score": 70
+  }}
+}}
+'''
+        elif mode == 'spelling':
+            prompt = f'''
+Kamu adalah guru TK yang sedang mengevaluasi ujian mengeja anak berusia 5-7 tahun melalui lisan.
+Anak diminta mengeja secara lisan huruf atau kata: "{target_word}".
+Namun, AI pengenal suara menangkap ejaan anak tersebut sebagai: "{input_word}".
+
+Tugasmu:
+1. Buat "voice_feedback" berupa kalimat penyemangat singkat dalam Bahasa Indonesia. Jika ejaannya salah, beritahu cara mengeja yang benar (misal: "Hampir benar! Harusnya B-O-L-A. Yuk coba lagi!"). Gunakan bahasa yang sangat lembut, ceria, dan tidak menghakimi (Maksimal 2 kalimat).
+2. Buat "analytics_data" untuk laporan orang tua (Big Data). Tentukan bagian ejaan yang kemungkinan salah atau terlewat (wrong_letters), jenis kesalahannya (error_type: "kesalahan_ejaan", "tidak_jelas", "salah_kata"), dan berikan estimasi accuracy_score (0-100).
+
+Kembalikan WAJIB dalam format JSON yang valid persis seperti skema berikut ini:
+{{
+  "voice_feedback": "Wah hampir benar! Tapi ejaan yang tepat adalah B-O-L-A yaa...",
+  "analytics_data": {{
+    "target_word": "{target_word}",
+    "written_word": "{input_word}",
+    "wrong_letters": ["huruf atau suku kata yang salah eja"],
+    "error_type": "kesalahan_ejaan",
+    "accuracy_score": 60
+  }}
+}}
+'''
+        else:
+            return jsonify({"status": "error", "message": "Mode tidak didukung"}), 400
+
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            )
+        )
+
+        if response.text:
+            rawText = response.text.strip()
+            start_idx = rawText.find('{')
+            end_idx = rawText.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                clean_json_str = rawText[start_idx:end_idx+1]
+                json_response = json.loads(clean_json_str)
+            else:
+                json_response = json.loads(rawText)
+                
+            if 'analytics_data' in json_response:
+                json_response['analytics_data']['mode'] = mode
+                
+            return jsonify(json_response), 200
+        else:
+            return jsonify({"status": "error", "message": "Response kosong dari AI"}), 500
+
+    except Exception as e:
+        print("ERROR EVALUATE AI:", e)
+        return jsonify({"status": "error", "message": f"Gagal mengevaluasi AI: {str(e)}"}), 500
 
 
 @main.route('/api/sync-progress', methods=['POST'])
