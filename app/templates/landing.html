@@ -1,20 +1,66 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="EduTech — Aplikasi belajar anak berbasis AI. Latihan menulis, mengeja, dan eksplorasi benda dengan teknologi AI interaktif. Download gratis sekarang!">
+  <meta name="description"
+    content="EduTech — Aplikasi belajar anak berbasis AI. Latihan menulis, mengeja, dan eksplorasi benda dengan teknologi AI interaktif. Download gratis sekarang!">
   <meta name="keywords" content="edutech, aplikasi belajar anak, AI pendidikan, latihan menulis, mengeja, gamifikasi">
   <meta name="author" content="EduTech Team">
 
-  <title>EduTech — Aplikasi Belajar Anak Berbasis AI</title>
+  <title>EduTech — Aplikasi Belajar Anak Berbasis AI, Belajar Menulis & Mengeja</title>
+
+  <!-- Canonical URL (Change this to your real production domain) -->
+  <link rel="canonical" href="https://be-edutech-app.com/">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://be-edutech-app.com/">
+  <meta property="og:title" content="EduTech — Aplikasi Belajar Anak Berbasis AI">
+  <meta property="og:description"
+    content="EduTech mengubah cara anak belajar menulis, mengeja, dan mengenal benda menjadi petualangan seru yang didukung oleh teknologi AI. Download gratis sekarang!">
+  <meta property="og:image" content="{{ url_for('static', filename='images/screenshot_home.png', _external=True) }}">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://be-edutech-app.com/">
+  <meta property="twitter:title" content="EduTech — Aplikasi Belajar Anak Berbasis AI">
+  <meta property="twitter:description"
+    content="EduTech mengubah cara anak belajar menulis, mengeja, dan mengenal benda menjadi petualangan seru yang didukung oleh teknologi AI. Download gratis sekarang!">
+  <meta property="twitter:image"
+    content="{{ url_for('static', filename='images/screenshot_home.png', _external=True) }}">
+
+  <!-- JSON-LD Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "EduTech",
+    "operatingSystem": "ANDROID",
+    "applicationCategory": "EducationalApplication",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "IDR"
+    },
+    "description": "Aplikasi belajar anak berbasis AI untuk latihan menulis, mengeja, dan eksplorasi benda dengan teknologi AI interaktif.",
+    "url": "https://be-edutech-app.com/",
+    "publisher": {
+      "@type": "Organization",
+      "name": "EduTech Team"
+    }
+  }
+  </script>
 
   <!-- Favicon -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
 
   <!-- Styles -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body>
 
   <!-- Animated Background Blobs -->
@@ -68,8 +114,8 @@
         </h1>
 
         <p class="hero__subtitle">
-          EduTech mengubah cara anak belajar menulis, mengeja, dan mengenal benda 
-          menjadi petualangan seru yang didukung oleh teknologi AI — 
+          EduTech mengubah cara anak belajar menulis, mengeja, dan mengenal benda
+          menjadi petualangan seru yang didukung oleh teknologi AI —
           seperti bermain game! 🎮
         </p>
 
@@ -153,7 +199,8 @@
           <div class="feature-card__icon" style="background: #EDE7F6;">✏️</div>
           <h3 class="feature-card__title">Latihan Menulis Huruf</h3>
           <p class="feature-card__desc">
-            Belajar menulis huruf kapital A-Z dan huruf kecil a-z dengan panduan interaktif. AI akan menilai tulisan tangan anak secara real-time.
+            Belajar menulis huruf kapital A-Z dan huruf kecil a-z dengan panduan interaktif. AI akan menilai tulisan
+            tangan anak secara real-time.
           </p>
         </div>
 
@@ -162,7 +209,8 @@
           <div class="feature-card__icon" style="background: #FFF3E0;">⚔️</div>
           <h3 class="feature-card__title">Ujian Seru</h3>
           <p class="feature-card__desc">
-            Tantangan ujian yang menguji kemampuan anak dengan format yang menyenangkan. Selesaikan ujian dan kumpulkan bintang! ⭐
+            Tantangan ujian yang menguji kemampuan anak dengan format yang menyenangkan. Selesaikan ujian dan kumpulkan
+            bintang! ⭐
           </p>
         </div>
 
@@ -171,7 +219,8 @@
           <div class="feature-card__icon" style="background: #E8F5E9;">🎤</div>
           <h3 class="feature-card__title">Mengeja dengan Suara</h3>
           <p class="feature-card__desc">
-            Latihan mengeja huruf dan kata dengan Text-to-Speech. Anak mendengar ejaan yang benar langsung dari AI dan bisa berlatih kapan saja.
+            Latihan mengeja huruf dan kata dengan Text-to-Speech. Anak mendengar ejaan yang benar langsung dari AI dan
+            bisa berlatih kapan saja.
           </p>
         </div>
 
@@ -180,7 +229,8 @@
           <div class="feature-card__icon" style="background: #FCE4EC;">🔍</div>
           <h3 class="feature-card__title">Detektif Benda</h3>
           <p class="feature-card__desc">
-            Gunakan kamera untuk memindai benda di sekitar. AI akan mengenali objek dan memberikan informasi edukatif tentang benda tersebut.
+            Gunakan kamera untuk memindai benda di sekitar. AI akan mengenali objek dan memberikan informasi edukatif
+            tentang benda tersebut.
           </p>
         </div>
 
@@ -189,7 +239,8 @@
           <div class="feature-card__icon" style="background: #F3E5F5;">🏆</div>
           <h3 class="feature-card__title">Leaderboard & Gamifikasi</h3>
           <p class="feature-card__desc">
-            Sistem poin, bintang, dan papan peringkat untuk memotivasi anak terus belajar. Semakin rajin, semakin tinggi levelnya!
+            Sistem poin, bintang, dan papan peringkat untuk memotivasi anak terus belajar. Semakin rajin, semakin tinggi
+            levelnya!
           </p>
         </div>
 
@@ -198,7 +249,8 @@
           <div class="feature-card__icon" style="background: #E8F5FE;">⚡</div>
           <h3 class="feature-card__title">Arena Duel Multiplayer</h3>
           <p class="feature-card__desc">
-            Ajak teman untuk duel mengeja dan berburu benda! Mode multiplayer yang seru dan kompetitif untuk belajar bersama.
+            Ajak teman untuk duel mengeja dan berburu benda! Mode multiplayer yang seru dan kompetitif untuk belajar
+            bersama.
           </p>
         </div>
       </div>
@@ -262,7 +314,8 @@
       <div class="app-preview__showcase reveal">
         <div>
           <div class="app-preview__phone">
-            <img src="{{ url_for('static', filename='images/screenshot_features.png') }}" alt="EduTech - Latihan Menulis">
+            <img src="{{ url_for('static', filename='images/screenshot_features.png') }}"
+              alt="EduTech - Latihan Menulis">
           </div>
           <div class="app-preview__label">✏️ Latihan Menulis</div>
         </div>
@@ -323,15 +376,15 @@
           <div class="section-badge section-badge--purple">🧠 Teknologi AI</div>
           <h2 class="section-title">Belajar Lebih Pintar dengan AI</h2>
           <p class="section-subtitle">
-            EduTech menggunakan teknologi AI terdepan dari Google Gemini untuk memberikan 
+            EduTech menggunakan teknologi AI terdepan dari Google Gemini untuk memberikan
             pengalaman belajar yang personal dan interaktif bagi setiap anak.
           </p>
         </div>
 
         <p style="color: var(--text-secondary); font-weight: 600; line-height: 1.8;">
-          Setiap tulisan tangan anak akan dianalisis secara real-time oleh AI, memberikan 
-          umpan balik yang akurat dan motivasi positif. Fitur Object Detection memungkinkan 
-          anak mengarahkan kamera ke benda di sekitarnya dan AI akan langsung mengenali serta 
+          Setiap tulisan tangan anak akan dianalisis secara real-time oleh AI, memberikan
+          umpan balik yang akurat dan motivasi positif. Fitur Object Detection memungkinkan
+          anak mengarahkan kamera ke benda di sekitarnya dan AI akan langsung mengenali serta
           memberikan informasi edukatif tentang benda tersebut — semuanya dalam Bahasa Indonesia! 🇮🇩
         </p>
       </div>
@@ -347,7 +400,7 @@
         <span class="cta-section__emoji">📲</span>
         <h2 class="cta-section__title">Siap Mulai Petualangan Belajar?</h2>
         <p class="cta-section__subtitle">
-          Download EduTech sekarang dan biarkan anak kamu belajar sambil bermain 
+          Download EduTech sekarang dan biarkan anak kamu belajar sambil bermain
           dengan teknologi AI yang menyenangkan!
         </p>
 
@@ -374,7 +427,7 @@
             <span>📚</span> EduTech
           </div>
           <p class="footer__brand-desc">
-            Aplikasi belajar anak berbasis AI yang mengubah proses belajar menjadi petualangan seru dan interaktif. 
+            Aplikasi belajar anak berbasis AI yang mengubah proses belajar menjadi petualangan seru dan interaktif.
             Dibuat dengan ❤️ untuk anak-anak Indonesia.
           </p>
         </div>
@@ -418,4 +471,5 @@
        ============================================ -->
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
+
 </html>

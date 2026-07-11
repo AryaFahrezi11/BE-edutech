@@ -4,7 +4,7 @@ import json
 import re
 import jwt
 import datetime
-from flask import Blueprint, jsonify, request, render_template
+from flask import Blueprint, jsonify, request, render_template, Response, make_response
 from google import genai
 from google.genai import types
 import PIL.Image
@@ -56,6 +56,36 @@ def _get_next_counter_seq(counter_name: str) -> int:
 def landing_page():
     """Landing page — mengenalkan aplikasi EduTech"""
     return render_template('landing.html')
+
+
+@main.route('/robots.txt')
+def robots_txt():
+    """Serve robots.txt for SEO"""
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "Sitemap: https://be-edutech-app.com/sitemap.xml"
+    ]
+    response = make_response("\n".join(lines))
+    response.headers["Content-Type"] = "text/plain"
+    return response
+
+
+@main.route('/sitemap.xml')
+def sitemap_xml():
+    """Serve sitemap.xml for SEO"""
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://be-edutech-app.com/</loc>
+    <lastmod>2026-07-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>'''
+    response = make_response(xml)
+    response.headers["Content-Type"] = "application/xml"
+    return response
 
 
 @main.route('/api/login', methods=['POST'])
