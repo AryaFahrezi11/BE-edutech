@@ -419,7 +419,7 @@ Kembalikan WAJIB dalam format JSON yang valid persis seperti skema berikut ini:
             return jsonify({"status": "error", "message": "Mode tidak didukung"}), 400
 
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
