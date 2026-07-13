@@ -541,10 +541,15 @@ def api_analyses_history():
 @admin.route("/api/scheduler-status")
 @login_required
 def api_scheduler_status():
-    """Mengembalikan status scheduler auto-scrape."""
+    """Mengembalikan status scheduler (kini menggunakan Vercel Cron)."""
     try:
-        from app.admin.scheduler import get_scheduler_status
-        status = get_scheduler_status()
+        # Vercel Cron dikonfigurasi melalui vercel.json, 
+        # kita kembalikan status statis untuk dashboard.
+        status = {
+            "running": True, 
+            "next_run": "Diatur oleh Vercel Cron",
+            "jobs": [{"id": "vercel_cron", "name": "Vercel Cron Auto-Scrape", "next_run_time": "Diatur oleh Vercel Cron"}]
+        }
 
         # Tambahkan info scraping terakhir dari DB
         db = get_db()
@@ -568,21 +573,35 @@ def api_scheduler_status():
 @admin.route("/api/trigger-scrape", methods=["POST"])
 @login_required
 def api_trigger_scrape():
-    """Memicu scraping otomatis secara manual (tanpa menunggu jadwal)."""
+    """Memicu scraping otomatis secara manual dari dashboard."""
     try:
-        from app.admin.scheduler import trigger_scrape_now
-        triggered = trigger_scrape_now()
-        if triggered:
-            return jsonify({
-                "status": "success",
-                "message": "Scraping dijadwalkan untuk dijalankan sekarang.",
-            })
+        from app.admin.scheduler import run_daily_scrape_task
+        result = run_daily_scrape_task()
         return jsonify({
-            "status": "error",
-            "message": "Scheduler belum aktif.",
-        }), 400
+            "status": "success",
+            "message": "Scraping berhasil dijalankan secara manual.",
+            "data": result
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+        
+@admin.route("/api/cron/scrape", methods=["GET", "POST"])
+def api_cron_scrape():
+    """
+    Rute yang dipanggil oleh Vercel Cron untuk menjalankan auto-scrape.
+    Dilindungi oleh CRON_SECRET dari environment variable.
+    """
+    auth_header = request.headers.get("Authorization")
+    expected_secret = os.getenv("CRON_SECRET")
+    
+    if expected_secret:
+        if auth_header != f"Bearer {expected_secret}":
+            return jsonify({"error": "Unauthorized"}), 401
+            
+    from app.admin.scheduler import run_daily_scrape_task
+    result = run_daily_scrape_task()
+    
+    return jsonify(result)
 
 
 @admin.route("/api/scrape-history")

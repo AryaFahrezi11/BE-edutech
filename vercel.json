@@ -14,5 +14,11 @@
       "src": "/(.*)",
       "dest": "run.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/admin/api/cron/scrape",
+      "schedule": "0 0 * * *"
+    }
   ]
 }
