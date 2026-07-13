@@ -30,7 +30,7 @@ def run_daily_scrape_task():
 
     for app_id in app_ids:
         try:
-            result = scrape_app_reviews(app_id, count=30)
+            result = scrape_app_reviews(app_id, count=100)
             # Preprocessing
             if "reviews" in result:
                 result["analysis"] = preprocess_reviews(result["reviews"])
