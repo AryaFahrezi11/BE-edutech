@@ -532,3 +532,112 @@ def api_analyses_history():
         return jsonify({"analyses": analyses})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────
+#  API: Auto-Scrape Scheduler
+# ─────────────────────────────────────────────
+
+@admin.route("/api/scheduler-status")
+@login_required
+def api_scheduler_status():
+    """Mengembalikan status scheduler (kini menggunakan Vercel Cron)."""
+    try:
+        # Vercel Cron dikonfigurasi melalui vercel.json, 
+        # kita kembalikan status statis untuk dashboard.
+        status = {
+            "running": True, 
+            "next_run": "Diatur oleh Vercel Cron",
+            "jobs": [{"id": "vercel_cron", "name": "Vercel Cron Auto-Scrape", "next_run_time": "Diatur oleh Vercel Cron"}]
+        }
+
+        # Tambahkan info scraping terakhir dari DB
+        db = get_db()
+        last_auto = db["competitor_scrapes"].find_one(
+            {"is_auto": True}, sort=[("timestamp", -1)]
+        )
+        if last_auto:
+            last_auto.pop("_id", None)
+            status["last_auto_scrape"] = last_auto.get("timestamp")
+            status["last_auto_apps"] = last_auto.get("app_ids", [])
+            status["last_auto_success"] = len(last_auto.get("results", {}))
+            status["last_auto_errors"] = len(last_auto.get("errors", {}))
+        else:
+            status["last_auto_scrape"] = None
+
+        return jsonify({"status": "success", "scheduler": status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin.route("/api/trigger-scrape", methods=["POST"])
+@login_required
+def api_trigger_scrape():
+    """Memicu scraping otomatis secara manual dari dashboard."""
+    try:
+        from app.admin.scheduler import run_daily_scrape_task
+        result = run_daily_scrape_task()
+        return jsonify({
+            "status": "success",
+            "message": "Scraping berhasil dijalankan secara manual.",
+            "data": result
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        
+@admin.route("/api/cron/scrape", methods=["GET", "POST"])
+def api_cron_scrape():
+    """
+    Rute yang dipanggil oleh Vercel Cron untuk menjalankan auto-scrape.
+    Dilindungi oleh CRON_SECRET dari environment variable.
+    """
+    auth_header = request.headers.get("Authorization")
+    expected_secret = os.getenv("CRON_SECRET")
+    
+    if expected_secret:
+        if auth_header != f"Bearer {expected_secret}":
+            return jsonify({"error": "Unauthorized"}), 401
+            
+    from app.admin.scheduler import run_daily_scrape_task
+    result = run_daily_scrape_task()
+    
+    return jsonify(result)
+
+
+@admin.route("/api/scrape-history")
+@login_required
+def api_scrape_history():
+    """Mengembalikan riwayat scraping (manual & otomatis) dengan pagination."""
+    try:
+        db = get_db()
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        filter_type = request.args.get("type", "all")  # all | auto | manual
+        skip = (page - 1) * limit
+
+        query = {}
+        if filter_type == "auto":
+            query["is_auto"] = True
+        elif filter_type == "manual":
+            query["$or"] = [{"is_auto": {"$exists": False}}, {"is_auto": False}]
+
+        total = db["competitor_scrapes"].count_documents(query)
+        scrapes = list(
+            db["competitor_scrapes"]
+            .find(query, {"_id": 0, "results": 0})  # Exclude heavy data
+            .sort("timestamp", -1)
+            .skip(skip)
+            .limit(limit)
+        )
+
+        return jsonify({
+            "status": "success",
+            "scrapes": scrapes,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+

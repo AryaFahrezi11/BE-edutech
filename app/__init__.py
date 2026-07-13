@@ -36,6 +36,9 @@ def create_app():
     from app.admin.routes import admin as admin_bp
     app.register_blueprint(admin_bp, url_prefix="/admin")
 
+    # Catatan: Scheduler APScheduler telah dihapus karena proyek ini menggunakan Vercel Cron
+
+
     return app
 
 
