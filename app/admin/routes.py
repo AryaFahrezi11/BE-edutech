@@ -409,29 +409,40 @@ def api_ai_analysis():
 
         client = genai.Client(api_key=gemini_key)
 
-        prompt = f"""Kamu adalah konsultan produk senior yang spesialis dalam aplikasi edukasi anak usia 4-8 tahun di Indonesia.
+        prompt = f"""Anda adalah Senior Product Consultant yang menganalisis ulasan Google Play Store aplikasi kompetitor.
 
-Di bawah ini adalah ulasan pengguna nyata dari aplikasi edukasi anak kompetitor di Google Play Store Indonesia:
+        Berdasarkan ulasan yang diberikan, buat analisis yang singkat, padat, dan langsung ke inti.
 
-{reviews_text}
+        Aturan:
+        - Gunakan Bahasa Indonesia yang profesional.
+        - Maksimal 250 kata.
+        - Jangan membuat paragraf panjang.
+        - Gunakan bullet point.
+        - Jangan menjelaskan terlalu detail.
+        - Jangan mengulang informasi.
+        - Fokus pada insight yang paling penting.
 
-Berdasarkan ulasan pengguna di atas, berikan analisis mendalam dalam format berikut:
+        Format jawaban WAJIB seperti berikut:
 
-## 🔍 Kekurangan & Keluhan Utama Kompetitor
-Identifikasi 5-8 kekurangan atau keluhan paling sering muncul dari pengguna. Sertakan nama aplikasi mana yang paling banyak mendapatkan keluhan tersebut.
+        📊 Analisis Kompetitor
 
-## 💡 Rekomendasi Konkret untuk EduTech
-Berikan 6-8 rekomendasi spesifik dan actionable yang dapat langsung diterapkan pada aplikasi EduTech berdasarkan kelemahan kompetitor. Setiap rekomendasi harus:
-- Spesifik dan dapat diimplementasikan
-- Menyebutkan mengapa rekomendasi ini akan meningkatkan nilai EduTech
+        ❌ Kekurangan Utama
+        - Maksimal 5 poin.
+        - Hanya tuliskan kekurangan yang paling sering muncul.
 
-## ⭐ Peluang Diferensiasi Utama
-Sebutkan 3-5 peluang unik yang dapat membuat EduTech lebih unggul dan berbeda di pasar edukasi anak Indonesia, berdasarkan celah yang tidak diisi kompetitor.
+        💡 Rekomendasi untuk EduTech
+        - Maksimal 5 poin.
+        - Berikan rekomendasi yang konkret dan dapat diterapkan.
 
-## 📊 Kesimpulan Eksekutif
-Rangkuman singkat (3-4 kalimat) tentang kondisi kompetitor dan posisi strategis terbaik untuk EduTech.
+        🚀 Peluang Diferensiasi
+        - Maksimal 3 poin.
+        - Jelaskan peluang agar EduTech lebih unggul dari kompetitor.
 
-Tulis seluruh analisis dalam Bahasa Indonesia yang profesional namun mudah dipahami. Gunakan format markdown yang rapi."""
+        ⭐ Kesimpulan
+        - Maksimal 2 kalimat.
+        - Ringkas dan langsung pada inti.
+
+        Jangan menambahkan pembukaan, penutup, disclaimer, atau penjelasan lain di luar format tersebut."""
 
         response = client.models.generate_content(
             model="gemini-2.5-flash", contents=[prompt]
