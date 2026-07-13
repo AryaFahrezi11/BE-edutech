@@ -928,6 +928,10 @@
 
         <!-- Scraping Visualizations -->
         <div id="scrapeVisualizations" style="display:none; margin-bottom:16px;">
+          <div id="realtimeBadge" style="display:none; align-items:center; gap:8px; margin-bottom:12px; padding:8px 12px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:8px; width:fit-content; color:#10b981; font-size:13px; font-weight:600;">
+            <span class="status-dot" style="box-shadow: 0 0 8px #10b981; background: #10b981;"></span>
+            <span id="realtimeText">Data Real-Time Hari Ini</span>
+          </div>
           <div style="display:grid; grid-template-columns: 1fr 2fr 2fr; gap:16px; align-items:stretch;">
             <div style="background:var(--bg-2); border:1px solid var(--border); padding:16px; border-radius:10px;">
               <div class="section-title" style="font-size:14px; margin-bottom:16px;">Statistik Review</div>
@@ -1342,6 +1346,13 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const d = await res.json();
 
+      // Tambahkan timestamp saat ini jika manual scrape
+      if (!d.timestamp) {
+          const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+          const localISOTime = (new Date(Date.now() - tzOffset)).toISOString().slice(0, 19).replace('T', ' ');
+          d.timestamp = localISOTime;
+      }
+
       renderScrapingData(d);
 
       if (Object.keys(d.errors || {}).length > 0) {
@@ -1421,6 +1432,34 @@
     let dataResults = scrapedData;
     
     if (!dataResults || Object.keys(dataResults).length === 0) return;
+    
+    // Tampilkan badge Real-Time
+    const rtBadge = document.getElementById('realtimeBadge');
+    const rtText = document.getElementById('realtimeText');
+    if (rtBadge && rtText) {
+       rtBadge.style.display = 'flex';
+       const todayStr = new Date().toLocaleDateString('en-CA'); // format YYYY-MM-DD
+       const isToday = d.timestamp && d.timestamp.startsWith(todayStr);
+       
+       if (isToday) {
+           rtBadge.style.background = 'rgba(16,185,129,0.1)';
+           rtBadge.style.borderColor = 'rgba(16,185,129,0.2)';
+           rtBadge.style.color = '#10b981';
+           rtBadge.querySelector('.status-dot').style.background = '#10b981';
+           rtBadge.querySelector('.status-dot').style.boxShadow = '0 0 8px #10b981';
+           rtBadge.querySelector('.status-dot').style.animation = 'pulse 2s ease infinite';
+           const timeStr = d.timestamp.length >= 16 ? d.timestamp.substring(11, 16) : d.timestamp;
+           rtText.innerHTML = `Data Real-Time <span style="font-weight:400; font-size:11px; margin-left:4px; opacity:0.8;">(Update hari ini, ${timeStr} WIB)</span>`;
+       } else {
+           rtBadge.style.background = 'rgba(245,158,11,0.1)';
+           rtBadge.style.borderColor = 'rgba(245,158,11,0.2)';
+           rtBadge.style.color = '#f59e0b';
+           rtBadge.querySelector('.status-dot').style.background = '#f59e0b';
+           rtBadge.querySelector('.status-dot').style.boxShadow = '0 0 8px #f59e0b';
+           rtBadge.querySelector('.status-dot').style.animation = 'none';
+           rtText.innerHTML = `Data Terakhir <span style="font-weight:400; font-size:11px; margin-left:4px; opacity:0.8;">(${d.timestamp || 'Lama'}) — Menunggu sinkronisasi hari ini</span>`;
+       }
+    }
     
     resultsDiv.style.display = 'flex';
     visDiv.style.display = 'block';

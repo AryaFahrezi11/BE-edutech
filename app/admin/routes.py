@@ -202,7 +202,15 @@ def api_activity_chart():
 
         # Sort dan ambil 30 hari terakhir
         sorted_days = sorted(trend_data.keys())[-30:]
-        trend_labels = sorted_days
+        
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        trend_labels = []
+        for d in sorted_days:
+            if d == today_str:
+                trend_labels.append(f"{d} (Hari Ini)")
+            else:
+                trend_labels.append(d)
+                
         trend_values = [trend_data[d] for d in sorted_days]
 
         return jsonify({
@@ -314,7 +322,7 @@ def api_scrape():
         try:
             # Mengurangi jumlah ulasan dari 50 menjadi 30 agar lebih cepat diproses
             # di server Render (menghindari timeout)
-            result = scrape_app_reviews(app_id, count=30)
+            result = scrape_app_reviews(app_id, count=100)
             # Preprocessing
             if "reviews" in result:
                 result["analysis"] = preprocess_reviews(result["reviews"])
