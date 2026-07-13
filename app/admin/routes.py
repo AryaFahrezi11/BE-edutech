@@ -532,3 +532,93 @@ def api_analyses_history():
         return jsonify({"analyses": analyses})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────
+#  API: Auto-Scrape Scheduler
+# ─────────────────────────────────────────────
+
+@admin.route("/api/scheduler-status")
+@login_required
+def api_scheduler_status():
+    """Mengembalikan status scheduler auto-scrape."""
+    try:
+        from app.admin.scheduler import get_scheduler_status
+        status = get_scheduler_status()
+
+        # Tambahkan info scraping terakhir dari DB
+        db = get_db()
+        last_auto = db["competitor_scrapes"].find_one(
+            {"is_auto": True}, sort=[("timestamp", -1)]
+        )
+        if last_auto:
+            last_auto.pop("_id", None)
+            status["last_auto_scrape"] = last_auto.get("timestamp")
+            status["last_auto_apps"] = last_auto.get("app_ids", [])
+            status["last_auto_success"] = len(last_auto.get("results", {}))
+            status["last_auto_errors"] = len(last_auto.get("errors", {}))
+        else:
+            status["last_auto_scrape"] = None
+
+        return jsonify({"status": "success", "scheduler": status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin.route("/api/trigger-scrape", methods=["POST"])
+@login_required
+def api_trigger_scrape():
+    """Memicu scraping otomatis secara manual (tanpa menunggu jadwal)."""
+    try:
+        from app.admin.scheduler import trigger_scrape_now
+        triggered = trigger_scrape_now()
+        if triggered:
+            return jsonify({
+                "status": "success",
+                "message": "Scraping dijadwalkan untuk dijalankan sekarang.",
+            })
+        return jsonify({
+            "status": "error",
+            "message": "Scheduler belum aktif.",
+        }), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin.route("/api/scrape-history")
+@login_required
+def api_scrape_history():
+    """Mengembalikan riwayat scraping (manual & otomatis) dengan pagination."""
+    try:
+        db = get_db()
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        filter_type = request.args.get("type", "all")  # all | auto | manual
+        skip = (page - 1) * limit
+
+        query = {}
+        if filter_type == "auto":
+            query["is_auto"] = True
+        elif filter_type == "manual":
+            query["$or"] = [{"is_auto": {"$exists": False}}, {"is_auto": False}]
+
+        total = db["competitor_scrapes"].count_documents(query)
+        scrapes = list(
+            db["competitor_scrapes"]
+            .find(query, {"_id": 0, "results": 0})  # Exclude heavy data
+            .sort("timestamp", -1)
+            .skip(skip)
+            .limit(limit)
+        )
+
+        return jsonify({
+            "status": "success",
+            "scrapes": scrapes,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total + limit - 1) // limit,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+

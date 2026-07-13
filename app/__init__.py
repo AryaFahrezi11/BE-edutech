@@ -36,6 +36,16 @@ def create_app():
     from app.admin.routes import admin as admin_bp
     app.register_blueprint(admin_bp, url_prefix="/admin")
 
+    # Inisialisasi scheduler auto-scrape kompetitor (setiap 24 jam)
+    # Hindari double-init saat Flask debug reloader aktif
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+        try:
+            from app.admin.scheduler import init_scheduler
+            init_scheduler(app)
+            print("[Scheduler] ✅ Auto-scrape scheduler berhasil diinisialisasi.")
+        except Exception as e:
+            print(f"[Scheduler] ⚠️ Gagal menginisialisasi scheduler: {e}")
+
     return app
 
 
