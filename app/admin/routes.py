@@ -320,7 +320,7 @@ def api_scrape():
 
     for app_id in app_ids:
         try:
-            # Mengurangi jumlah ulasan dari 50 menjadi 30 agar lebih cepat diproses
+            
             # di server Render (menghindari timeout)
             result = scrape_app_reviews(app_id, count=100)
             # Preprocessing
@@ -419,43 +419,32 @@ def api_ai_analysis():
 
         prompt = f"""Anda adalah Senior Product Consultant yang menganalisis ulasan Google Play Store aplikasi kompetitor.
 
-        Berdasarkan ulasan yang diberikan, buat analisis yang singkat, padat, dan langsung ke inti.
+        Berdasarkan ulasan yang diberikan, buat analisis perbandingan aplikasi.
+        Anda HARUS mengembalikan hasil HANYA dalam format JSON dengan struktur persis seperti berikut:
+        {{
+          "perbandingan": [
+            {{
+              "nama_aplikasi": "Nama Aplikasi",
+              "kelebihan": ["Poin kelebihan 1", "Poin kelebihan 2"],
+              "kekurangan": ["Poin kekurangan 1", "Poin kekurangan 2"]
+            }}
+          ],
+          "rekomendasi_umum": ["Rekomendasi 1", "Rekomendasi 2"],
+          "kesimpulan": "Kesimpulan singkat maksimal 2 kalimat"
+        }}
 
         Aturan:
-        - Gunakan Bahasa Indonesia yang profesional.
-        - Maksimal 250 kata.
-        - Jangan membuat paragraf panjang.
-        - Gunakan bullet point.
-        - Jangan menjelaskan terlalu detail.
-        - Jangan mengulang informasi.
-        - Fokus pada insight yang paling penting.
-
-        Format jawaban WAJIB seperti berikut:
-
-        📊 Analisis Kompetitor
-
-        ❌ Kekurangan Utama
-        - Maksimal 5 poin.
-        - Hanya tuliskan kekurangan yang paling sering muncul.
-
-        💡 Rekomendasi untuk EduTech
-        - Maksimal 5 poin.
-        - Berikan rekomendasi yang konkret dan dapat diterapkan.
-
-        🚀 Peluang Diferensiasi
-        - Maksimal 3 poin.
-        - Jelaskan peluang agar EduTech lebih unggul dari kompetitor.
-
-        ⭐ Kesimpulan
-        - Maksimal 2 kalimat.
-        - Ringkas dan langsung pada inti.
-
-        Jangan menambahkan pembukaan, penutup, disclaimer, atau penjelasan lain di luar format tersebut."""
+        - Buat maksimal 4 poin kelebihan dan 4 poin kekurangan untuk setiap aplikasi.
+        - Kalimat poin harus sangat singkat (maksimal 6 kata).
+        - Rekomendasi umum maksimal 3 poin yang aplikatif.
+        """
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash", contents=[prompt]
+            model="gemini-2.5-flash", 
+            contents=[prompt, reviews_text],
+            config={"response_mime_type": "application/json"}
         )
-        analysis_text = response.text or "Gagal mendapatkan analisis dari AI."
+        analysis_text = response.text or "{}"
 
         # Simpan hasil analisis ke DB
         try:
