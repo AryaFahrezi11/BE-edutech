@@ -1,6 +1,5 @@
 """
 Logika eksekusi scraping otomatis untuk dipanggil oleh Vercel Cron.
-(Sebelumnya menggunakan APScheduler).
 """
 
 import datetime
