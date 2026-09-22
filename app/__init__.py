@@ -13,7 +13,7 @@ def create_app():
     # Pastikan .env ter-load saat app factory dipanggil
     try:
         from dotenv import load_dotenv
-        load_dotenv()
+        load_dotenv(override=True)
     except Exception:
         pass
 
@@ -36,15 +36,21 @@ def create_app():
     from app.admin.routes import admin as admin_bp
     app.register_blueprint(admin_bp, url_prefix="/admin")
 
+    # Daftarkan blueprint AI Avatar Chatbot (D-ID + Gemini)
+    from app.avatar_routes import avatar_bp
+    app.register_blueprint(avatar_bp)
+
+
     # Inisialisasi scheduler auto-scrape kompetitor (setiap 24 jam)
     # Hindari double-init saat Flask debug reloader aktif
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
         try:
             from app.admin.scheduler import init_scheduler
             init_scheduler(app)
-            print("[Scheduler] ✅ Auto-scrape scheduler berhasil diinisialisasi.")
+            print("[Scheduler] [OK] Auto-scrape scheduler berhasil diinisialisasi.")
         except Exception as e:
-            print(f"[Scheduler] ⚠️ Gagal menginisialisasi scheduler: {e}")
+            print(f"[Scheduler] [WARNING] Gagal menginisialisasi scheduler: {e}")
+
 
     return app
 

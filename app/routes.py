@@ -419,7 +419,7 @@ Kembalikan WAJIB dalam format JSON yang valid persis seperti skema berikut ini:
             return jsonify({"status": "error", "message": "Mode tidak didukung"}), 400
 
         response = client.models.generate_content(
-            model='gemini-3.5-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -439,8 +439,49 @@ Kembalikan WAJIB dalam format JSON yang valid persis seperti skema berikut ini:
                 
             if 'analytics_data' in json_response:
                 json_response['analytics_data']['mode'] = mode
-                
+
+            # --- D-ID AVATAR EVALUATION VIDEO GENERATION (FAST ASYNC RESPONSIVE) ---
+            voice_feedback = json_response.get("voice_feedback")
+            talk_id = None
+            video_url = None
+
+            if voice_feedback and os.getenv("DID_API_KEYS"):
+                try:
+                    from app.avatar_routes import make_did_request, get_avatar_image_url
+
+                    did_payload = {
+                        "script": {
+                            "type": "text",
+                            "subtitles": False,
+                            "provider": {
+                                "type": "microsoft",
+                                "voice_id": "id-ID-GadisNeural"
+                            },
+                            "input": voice_feedback
+                        },
+                        "config": {
+                            "fluent": False,
+                            "pad_audio": 0.0
+                        },
+                        "source_url": get_avatar_image_url()
+                    }
+
+                    print(f"[Evaluate AI D-ID] Fast-Creating video talk for Bu Guru Ani: '{voice_feedback}'")
+                    create_res, status_code, _ = make_did_request("POST", "https://api.d-id.com/talks", did_payload)
+
+                    if status_code in [200, 201] and "id" in create_res:
+                        talk_id = create_res["id"]
+                        print(f"[Evaluate AI D-ID] Job created! talk_id: {talk_id}")
+
+                except Exception as e:
+                    print(f"[Evaluate AI D-ID Error] {e}")
+
+            from app.avatar_routes import get_avatar_image_url
+            json_response['talk_id'] = talk_id
+            json_response['video_url'] = video_url
+            json_response['avatar_image'] = get_avatar_image_url()
             return jsonify(json_response), 200
+
         else:
             return jsonify({"status": "error", "message": "Response kosong dari AI"}), 500
 
