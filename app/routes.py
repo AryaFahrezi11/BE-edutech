@@ -378,7 +378,7 @@ Anak diminta menulis huruf atau kata: "{target_word}".
 Namun, AI pembaca tulisan membaca tulisan anak tersebut sebagai: "{input_word}".
 
 Tugasmu:
-1. Buat "voice_feedback" berupa kalimat penyemangat singkat dalam Bahasa Indonesia. Jika tulisannya salah total atau ada huruf yang tertukar, beritahu huruf apa yang salah dengan bahasa yang sangat lembut dan ceria (Maksimal 2 kalimat). Jika sudah lumayan mirip, puji dia.
+1. Buat "voice_feedback" berupa kalimat penyemangat singkat dalam Bahasa Indonesia. Jika tulisannya salah total, tidak terdeteksi, atau ada huruf yang tertukar, beritahu huruf apa yang salah dengan bahasa yang sangat lembut dan ceria (Maksimal 2 kalimat). Jika sudah lumayan mirip, puji dia. PENTING: Jangan pernah mengatakan "tulisan kurang tebal" atau menyinggung ketebalan garis, karena kamu tidak bisa melihat gambarnya.
 2. Buat "analytics_data" untuk laporan orang tua (Big Data). Tentukan huruf apa saja yang kemungkinan salah ditulis (wrong_letters), jenis kesalahannya (error_type: "kesalahan_bentuk", "typo", "tidak_terbaca"), dan berikan estimasi accuracy_score (0-100).
 
 Kembalikan WAJIB dalam format JSON yang valid persis seperti skema berikut ini:
