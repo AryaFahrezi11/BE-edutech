@@ -489,6 +489,45 @@ Kembalikan WAJIB dalam format JSON yang valid persis seperti skema berikut ini:
         print("ERROR EVALUATE AI:", e)
         return jsonify({"status": "error", "message": f"Gagal mengevaluasi AI: {str(e)}"}), 500
 
+@main.route('/api/chat-ai', methods=['POST'])
+def chat_ai():
+    data = request.get_json()
+    message = data.get('message')
+    user_name = data.get('user_name', 'Teman')
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"status": "error", "message": "API Key Gemini belum diatur di backend"}), 500
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
+        prompt = f'''
+Kamu adalah Owl, burung hantu pintar dan ramah peliharaan Bu Guru Ani di EduTech.
+Kamu sedang menemani belajar seorang anak berusia 4 sampai 9 tahun yang bernama {user_name}.
+Kamu memposisikan dirimu sebagai guru pendamping yang sangat sabar, ceria, dan interaktif.
+Jika anak bertanya tentang pelajaran (contoh: matematika seperti "1+1 berapa?"), JANGAN langsung memberikan jawabannya!
+Berikan analogi visual sederhana yang mudah dibayangkan anak-anak (contoh: "Coba bayangkan ada 1 apel di tangan kirimu, lalu Owl kasih 1 apel lagi di tangan kananmu. Coba hitung gabungannya ada berapa?"). Arahkan mereka untuk berpikir sendiri!
+Gunakan bahasa Indonesia. Maksimal 3-4 kalimat. Jangan gunakan tanda baca aneh, hanya koma, titik, tanda seru, atau tanda tanya.
+Sapa namanya di awal!
+
+Pertanyaan dari {user_name}: "{message}"
+'''
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        
+        reply_text = response.text.strip()
+        return jsonify({
+            "status": "success",
+            "reply": reply_text
+        })
+    except Exception as e:
+        print("❌ Error Exception Chat AI:", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @main.route('/api/sync-progress', methods=['POST'])
 def sync_progress():
