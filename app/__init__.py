@@ -42,14 +42,8 @@ def create_app():
 
 
     # Inisialisasi scheduler auto-scrape kompetitor (setiap 24 jam)
-    # Hindari double-init saat Flask debug reloader aktif
-    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
-        try:
-            from app.admin.scheduler import init_scheduler
-            init_scheduler(app)
-            print("[Scheduler] [OK] Auto-scrape scheduler berhasil diinisialisasi.")
-        except Exception as e:
-            print(f"[Scheduler] [WARNING] Gagal menginisialisasi scheduler: {e}")
+    # Karena kita menggunakan Vercel Cron, inisialisasi APScheduler lokal tidak lagi dibutuhkan.
+    # Blok init_scheduler dihapus untuk menghindari ImportError.
 
 
     return app
