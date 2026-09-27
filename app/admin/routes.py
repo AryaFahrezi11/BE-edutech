@@ -202,7 +202,15 @@ def api_activity_chart():
 
         # Sort dan ambil 30 hari terakhir
         sorted_days = sorted(trend_data.keys())[-30:]
-        trend_labels = sorted_days
+        
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        trend_labels = []
+        for d in sorted_days:
+            if d == today_str:
+                trend_labels.append(f"{d} (Hari Ini)")
+            else:
+                trend_labels.append(d)
+                
         trend_values = [trend_data[d] for d in sorted_days]
 
         return jsonify({
@@ -312,9 +320,9 @@ def api_scrape():
 
     for app_id in app_ids:
         try:
-            # Mengurangi jumlah ulasan dari 50 menjadi 30 agar lebih cepat diproses
+            
             # di server Render (menghindari timeout)
-            result = scrape_app_reviews(app_id, count=30)
+            result = scrape_app_reviews(app_id, count=100)
             # Preprocessing
             if "reviews" in result:
                 result["analysis"] = preprocess_reviews(result["reviews"])
@@ -411,43 +419,32 @@ def api_ai_analysis():
 
         prompt = f"""Anda adalah Senior Product Consultant yang menganalisis ulasan Google Play Store aplikasi kompetitor.
 
-        Berdasarkan ulasan yang diberikan, buat analisis yang singkat, padat, dan langsung ke inti.
+        Berdasarkan ulasan yang diberikan, buat analisis perbandingan aplikasi.
+        Anda HARUS mengembalikan hasil HANYA dalam format JSON dengan struktur persis seperti berikut:
+        {{
+          "perbandingan": [
+            {{
+              "nama_aplikasi": "Nama Aplikasi",
+              "kelebihan": ["Poin kelebihan 1", "Poin kelebihan 2"],
+              "kekurangan": ["Poin kekurangan 1", "Poin kekurangan 2"]
+            }}
+          ],
+          "rekomendasi_umum": ["Rekomendasi 1", "Rekomendasi 2"],
+          "kesimpulan": "Kesimpulan singkat maksimal 2 kalimat"
+        }}
 
         Aturan:
-        - Gunakan Bahasa Indonesia yang profesional.
-        - Maksimal 250 kata.
-        - Jangan membuat paragraf panjang.
-        - Gunakan bullet point.
-        - Jangan menjelaskan terlalu detail.
-        - Jangan mengulang informasi.
-        - Fokus pada insight yang paling penting.
-
-        Format jawaban WAJIB seperti berikut:
-
-        📊 Analisis Kompetitor
-
-        ❌ Kekurangan Utama
-        - Maksimal 5 poin.
-        - Hanya tuliskan kekurangan yang paling sering muncul.
-
-        💡 Rekomendasi untuk EduTech
-        - Maksimal 5 poin.
-        - Berikan rekomendasi yang konkret dan dapat diterapkan.
-
-        🚀 Peluang Diferensiasi
-        - Maksimal 3 poin.
-        - Jelaskan peluang agar EduTech lebih unggul dari kompetitor.
-
-        ⭐ Kesimpulan
-        - Maksimal 2 kalimat.
-        - Ringkas dan langsung pada inti.
-
-        Jangan menambahkan pembukaan, penutup, disclaimer, atau penjelasan lain di luar format tersebut."""
+        - Buat maksimal 4 poin kelebihan dan 4 poin kekurangan untuk setiap aplikasi.
+        - Kalimat poin harus sangat singkat (maksimal 6 kata).
+        - Rekomendasi umum maksimal 3 poin yang aplikatif.
+        """
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash", contents=[prompt]
+            model="gemini-2.5-flash", 
+            contents=[prompt, reviews_text],
+            config={"response_mime_type": "application/json"}
         )
-        analysis_text = response.text or "Gagal mendapatkan analisis dari AI."
+        analysis_text = response.text or "{}"
 
         # Simpan hasil analisis ke DB
         try:
@@ -541,10 +538,15 @@ def api_analyses_history():
 @admin.route("/api/scheduler-status")
 @login_required
 def api_scheduler_status():
-    """Mengembalikan status scheduler auto-scrape."""
+    """Mengembalikan status scheduler (kini menggunakan Vercel Cron)."""
     try:
-        from app.admin.scheduler import get_scheduler_status
-        status = get_scheduler_status()
+        # Vercel Cron dikonfigurasi melalui vercel.json, 
+        # kita kembalikan status statis untuk dashboard.
+        status = {
+            "running": True, 
+            "next_run": "Diatur oleh Vercel Cron",
+            "jobs": [{"id": "vercel_cron", "name": "Vercel Cron Auto-Scrape", "next_run_time": "Diatur oleh Vercel Cron"}]
+        }
 
         # Tambahkan info scraping terakhir dari DB
         db = get_db()
@@ -568,21 +570,35 @@ def api_scheduler_status():
 @admin.route("/api/trigger-scrape", methods=["POST"])
 @login_required
 def api_trigger_scrape():
-    """Memicu scraping otomatis secara manual (tanpa menunggu jadwal)."""
+    """Memicu scraping otomatis secara manual dari dashboard."""
     try:
-        from app.admin.scheduler import trigger_scrape_now
-        triggered = trigger_scrape_now()
-        if triggered:
-            return jsonify({
-                "status": "success",
-                "message": "Scraping dijadwalkan untuk dijalankan sekarang.",
-            })
+        from app.admin.scheduler import run_daily_scrape_task
+        result = run_daily_scrape_task()
         return jsonify({
-            "status": "error",
-            "message": "Scheduler belum aktif.",
-        }), 400
+            "status": "success",
+            "message": "Scraping berhasil dijalankan secara manual.",
+            "data": result
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+        
+@admin.route("/api/cron/scrape", methods=["GET", "POST"])
+def api_cron_scrape():
+    """
+    Rute yang dipanggil oleh Vercel Cron untuk menjalankan auto-scrape.
+    Dilindungi oleh CRON_SECRET dari environment variable.
+    """
+    auth_header = request.headers.get("Authorization")
+    expected_secret = os.getenv("CRON_SECRET")
+    
+    if expected_secret:
+        if auth_header != f"Bearer {expected_secret}":
+            return jsonify({"error": "Unauthorized"}), 401
+            
+    from app.admin.scheduler import run_daily_scrape_task
+    result = run_daily_scrape_task()
+    
+    return jsonify(result)
 
 
 @admin.route("/api/scrape-history")

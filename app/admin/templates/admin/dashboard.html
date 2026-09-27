@@ -928,7 +928,11 @@
 
         <!-- Scraping Visualizations -->
         <div id="scrapeVisualizations" style="display:none; margin-bottom:16px;">
-          <div style="display:grid; grid-template-columns: 1fr 2fr 2fr; gap:16px; align-items:stretch;">
+          <div id="realtimeBadge" style="display:none; align-items:center; gap:8px; margin-bottom:12px; padding:8px 12px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:8px; width:fit-content; color:#10b981; font-size:13px; font-weight:600;">
+            <span class="status-dot" style="box-shadow: 0 0 8px #10b981; background: #10b981;"></span>
+            <span id="realtimeText">Data Real-Time Hari Ini</span>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 2fr 2fr; gap:16px; align-items:stretch; margin-bottom:16px;">
             <div style="background:var(--bg-2); border:1px solid var(--border); padding:16px; border-radius:10px;">
               <div class="section-title" style="font-size:14px; margin-bottom:16px;">Statistik Review</div>
               <div id="reviewStatsContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
@@ -941,6 +945,10 @@
               <div class="section-title" style="font-size:14px; margin-bottom:16px;">Top Keywords (WordCloud)</div>
               <canvas id="wordCloudCanvas" height="200" style="width:100%; max-height:200px;"></canvas>
             </div>
+          </div>
+          <div style="background:var(--bg-2); border:1px solid var(--border); padding:16px; border-radius:10px;">
+            <div class="section-title" style="font-size:14px; margin-bottom:16px;">Perbandingan Rating Aplikasi</div>
+            <canvas id="compareChart" height="200" style="width:100%; max-height:200px;"></canvas>
           </div>
         </div>
 
@@ -1342,6 +1350,13 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const d = await res.json();
 
+      // Tambahkan timestamp saat ini jika manual scrape
+      if (!d.timestamp) {
+          const tzOffset = (new Date()).getTimezoneOffset() * 60000;
+          const localISOTime = (new Date(Date.now() - tzOffset)).toISOString().slice(0, 19).replace('T', ' ');
+          d.timestamp = localISOTime;
+      }
+
       renderScrapingData(d);
 
       if (Object.keys(d.errors || {}).length > 0) {
@@ -1387,7 +1402,58 @@
 
       box.style.display = 'block';
       document.getElementById('aiTimestamp').textContent = d.timestamp || '';
-      document.getElementById('aiContent').innerHTML = markdownToHtml(d.analysis || '');
+      
+      try {
+          const analysisData = JSON.parse(d.analysis.replace(/```json/g, '').replace(/```/g, '').trim());
+          let html = '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; margin-bottom:20px;">';
+          
+          if (analysisData.perbandingan && Array.isArray(analysisData.perbandingan)) {
+              analysisData.perbandingan.forEach(app => {
+                  html += `
+                  <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:10px; padding:16px;">
+                      <h4 style="margin:0 0 12px 0; color:var(--text-primary); font-size:15px; display:flex; align-items:center; gap:8px;">📱 ${esc(app.nama_aplikasi)}</h4>
+                      
+                      <div style="margin-bottom:12px;">
+                          <div style="font-size:12px; font-weight:600; color:var(--green); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">✅ Kelebihan</div>
+                          <ul style="margin:0; padding-left:20px; font-size:13px; color:var(--text-secondary); line-height:1.6;">
+                              ${(app.kelebihan || []).map(k => `<li>${esc(k)}</li>`).join('')}
+                          </ul>
+                      </div>
+                      
+                      <div>
+                          <div style="font-size:12px; font-weight:600; color:var(--red); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">❌ Kekurangan</div>
+                          <ul style="margin:0; padding-left:20px; font-size:13px; color:var(--text-secondary); line-height:1.6;">
+                              ${(app.kekurangan || []).map(k => `<li>${esc(k)}</li>`).join('')}
+                          </ul>
+                      </div>
+                  </div>`;
+              });
+          }
+          html += '</div>';
+
+          if (analysisData.rekomendasi_umum && analysisData.rekomendasi_umum.length > 0) {
+              html += `
+              <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:20px;">
+                  <h4 style="margin:0 0 12px 0; color:var(--blue); font-size:14px; display:flex; align-items:center; gap:8px;">💡 Rekomendasi Umum</h4>
+                  <ul style="margin:0; padding-left:20px; font-size:13px; color:var(--text-secondary); line-height:1.6;">
+                      ${analysisData.rekomendasi_umum.map(r => `<li>${esc(r)}</li>`).join('')}
+                  </ul>
+              </div>`;
+          }
+
+          if (analysisData.kesimpulan) {
+              html += `
+              <div style="background:var(--blue-dim); border:1px solid rgba(59,130,246,0.3); border-radius:10px; padding:16px;">
+                  <h4 style="margin:0 0 8px 0; color:var(--blue); font-size:14px; display:flex; align-items:center; gap:8px;">⭐ Kesimpulan</h4>
+                  <p style="margin:0; font-size:13px; color:var(--text-primary); line-height:1.6;">${esc(analysisData.kesimpulan)}</p>
+              </div>`;
+          }
+          document.getElementById('aiContent').innerHTML = html;
+      } catch (err) {
+          // Fallback if AI somehow returns non-JSON or invalid JSON
+          document.getElementById('aiContent').innerHTML = markdownToHtml(d.analysis || '');
+      }
+
       box.scrollIntoView({ behavior: 'smooth', block: 'start' });
       showToast('Analisis AI selesai!');
 
@@ -1422,6 +1488,34 @@
     
     if (!dataResults || Object.keys(dataResults).length === 0) return;
     
+    // Tampilkan badge Real-Time
+    const rtBadge = document.getElementById('realtimeBadge');
+    const rtText = document.getElementById('realtimeText');
+    if (rtBadge && rtText) {
+       rtBadge.style.display = 'flex';
+       const todayStr = new Date().toLocaleDateString('en-CA'); // format YYYY-MM-DD
+       const isToday = d.timestamp && d.timestamp.startsWith(todayStr);
+       
+       if (isToday) {
+           rtBadge.style.background = 'rgba(16,185,129,0.1)';
+           rtBadge.style.borderColor = 'rgba(16,185,129,0.2)';
+           rtBadge.style.color = '#10b981';
+           rtBadge.querySelector('.status-dot').style.background = '#10b981';
+           rtBadge.querySelector('.status-dot').style.boxShadow = '0 0 8px #10b981';
+           rtBadge.querySelector('.status-dot').style.animation = 'pulse 2s ease infinite';
+           const timeStr = d.timestamp.length >= 16 ? d.timestamp.substring(11, 16) : d.timestamp;
+           rtText.innerHTML = `Data Real-Time <span style="font-weight:400; font-size:11px; margin-left:4px; opacity:0.8;">(Update hari ini, ${timeStr} WIB)</span>`;
+       } else {
+           rtBadge.style.background = 'rgba(245,158,11,0.1)';
+           rtBadge.style.borderColor = 'rgba(245,158,11,0.2)';
+           rtBadge.style.color = '#f59e0b';
+           rtBadge.querySelector('.status-dot').style.background = '#f59e0b';
+           rtBadge.querySelector('.status-dot').style.boxShadow = '0 0 8px #f59e0b';
+           rtBadge.querySelector('.status-dot').style.animation = 'none';
+           rtText.innerHTML = `Data Terakhir <span style="font-weight:400; font-size:11px; margin-left:4px; opacity:0.8;">(${d.timestamp || 'Lama'}) — Menunggu sinkronisasi hari ini</span>`;
+       }
+    }
+    
     resultsDiv.style.display = 'flex';
     visDiv.style.display = 'block';
     resultsDiv.innerHTML = '';
@@ -1431,6 +1525,9 @@
     let totalApps = 0;
     let aggRatingDist = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0};
     let allKeywords = [];
+
+    let compareLabels = [];
+    let compareData = [];
 
     for (const [appId, data] of Object.entries(dataResults)) {
       if (data.error) {
@@ -1445,7 +1542,7 @@
       }
       totalApps++;
       totalReviews += data.total_fetched || 0;
-      
+
       if (data.analysis) {
         const stats = data.analysis.stats;
         const rDist = data.analysis.rating_distribution;
@@ -1455,6 +1552,8 @@
         for (let i = 1; i <= 5; i++) aggRatingDist[i] += (rDist[i] || 0);
         
         allKeywords.push(...(kw || []));
+        compareLabels.push(data.app_name || appId);
+        compareData.push(stats.average_rating || 0);
       }
       
       const reviewsHtml = (data.reviews || []).slice(0,10).map(r => {
@@ -1511,6 +1610,32 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8' } }, x: { ticks: { color: '#94a3b8' } } },
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      // Update Compare Chart
+      const compareCtx = document.getElementById('compareChart').getContext('2d');
+      if (window.currentCompareChart) window.currentCompareChart.destroy();
+      window.currentCompareChart = new Chart(compareCtx, {
+        type: 'bar',
+        data: {
+          labels: compareLabels,
+          datasets: [{
+            label: 'Rata-rata Rating',
+            data: compareData,
+            backgroundColor: 'rgba(59,130,246,0.8)',
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: 'y', // horizontal bar chart
+          scales: {
+            x: { beginAtZero: true, max: 5, ticks: { color: '#94a3b8' } },
+            y: { ticks: { color: '#94a3b8' } }
+          },
           plugins: { legend: { display: false } }
         }
       });
