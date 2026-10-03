@@ -19,6 +19,7 @@ from flask import (
     session,
     jsonify,
 )
+from werkzeug.security import generate_password_hash
 
 from app.extensions import get_db
 
@@ -295,6 +296,112 @@ def api_users():
             "limit": limit,
             "total_pages": (total_count + limit - 1) // limit,
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@admin.route("/api/users", methods=["POST"])
+@login_required
+def api_create_user():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Data tidak valid"}), 400
+
+        nama = data.get("nama_lengkap", "").strip()
+        email = data.get("email", "").strip().lower()
+        password = data.get("password", "")
+        role = data.get("role", "siswa")
+        is_verified = data.get("is_verified", False)
+
+        if not nama or not email or not password:
+            return jsonify({"error": "Nama, email, dan password wajib diisi"}), 400
+
+        db = get_db()
+        if db["users"].find_one({"email": email}):
+            return jsonify({"error": "Email sudah terdaftar"}), 409
+
+        hashed_password = generate_password_hash(password)
+        
+        counter = db["counters"].find_one_and_update(
+            {"name": "users"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True,
+        )
+        user_id = int(counter.get("seq", 0))
+        now_str = _now_str()
+
+        user_doc = {
+            "id": user_id,
+            "nama_lengkap": nama,
+            "email": email,
+            "password": hashed_password,
+            "role": role,
+            "is_verified": is_verified,
+            "profile_pict": None,
+            "created_at": now_str,
+            "updated_at": now_str,
+        }
+        db["users"].insert_one(user_doc)
+        
+        return jsonify({"status": "success", "message": "Pengguna berhasil dibuat"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin.route("/api/users/<int:user_id>", methods=["PUT"])
+@login_required
+def api_update_user(user_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Data tidak valid"}), 400
+
+        db = get_db()
+        user = db["users"].find_one({"id": user_id})
+        if not user:
+            return jsonify({"error": "Pengguna tidak ditemukan"}), 404
+
+        update_data = {}
+        if "nama_lengkap" in data:
+            update_data["nama_lengkap"] = data["nama_lengkap"].strip()
+        if "email" in data:
+            new_email = data["email"].strip().lower()
+            if new_email != user.get("email"):
+                if db["users"].find_one({"email": new_email}):
+                    return jsonify({"error": "Email sudah digunakan oleh akun lain"}), 409
+            update_data["email"] = new_email
+        if "role" in data:
+            update_data["role"] = data["role"]
+        if "is_verified" in data:
+            update_data["is_verified"] = data["is_verified"]
+        if "password" in data and data["password"]:
+            update_data["password"] = generate_password_hash(data["password"])
+            
+        update_data["updated_at"] = _now_str()
+
+        if update_data:
+            db["users"].update_one({"id": user_id}, {"$set": update_data})
+
+        return jsonify({"status": "success", "message": "Pengguna berhasil diperbarui"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin.route("/api/users/<int:user_id>", methods=["DELETE"])
+@login_required
+def api_delete_user(user_id):
+    try:
+        db = get_db()
+        result = db["users"].delete_one({"id": user_id})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Pengguna tidak ditemukan"}), 404
+            
+        # Optional: Delete related data like user_progress and activity_logs
+        db["user_progress"].delete_many({"user_id": user_id})
+        db["activity_logs"].delete_many({"user_id": user_id})
+        
+        return jsonify({"status": "success", "message": "Pengguna berhasil dihapus"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

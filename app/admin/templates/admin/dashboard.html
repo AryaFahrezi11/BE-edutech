@@ -622,6 +622,75 @@
     }
     .loading-text { color: var(--text-secondary); font-size: 14px; }
 
+    /* User Management Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(7,11,23,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 800;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 100%; max-width: 500px;
+      overflow: hidden;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+      animation: modalIn 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+    @keyframes modalIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; }
+    .modal-close {
+      background: transparent; border: none; color: var(--text-secondary);
+      font-size: 20px; cursor: pointer;
+      transition: color 0.15s;
+    }
+    .modal-close:hover { color: var(--text-primary); }
+    .modal-body { padding: 24px; }
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .form-input {
+      width: 100%; padding: 12px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif; font-size: 14px;
+      outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-input:focus { border-color: var(--purple); box-shadow: 0 0 0 2px rgba(124,58,237,0.12); }
+    .form-select {
+      width: 100%; padding: 12px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif; font-size: 14px;
+      outline: none; transition: border-color 0.2s;
+      appearance: none;
+    }
+    .form-select:focus { border-color: var(--purple); }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+      background: rgba(255,255,255,0.02);
+    }
+    .action-icon-btn {
+      background: transparent; border: none; padding: 6px; border-radius: 6px; cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.15s;
+    }
+    .action-icon-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .action-icon-btn.edit:hover { color: var(--blue); }
+    .action-icon-btn.delete:hover { color: var(--red); background: var(--red-dim); }
+
     /* Toast notifications */
     .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
     .toast {
@@ -837,8 +906,8 @@
         </button>
       </div>
       <div class="section-body" style="padding: 16px 24px;">
-        <div class="table-controls">
-          <div class="search-wrapper">
+        <div class="table-controls" style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="search-wrapper" style="flex:1; max-width:400px;">
             <span class="search-icon">🔎</span>
             <input
               type="text"
@@ -848,6 +917,9 @@
               oninput="debounceSearch(this.value)"
             />
           </div>
+          <button class="btn-primary" onclick="showAddUserModal()" style="font-size:13px; padding:10px 16px;">
+            <span>➕</span> Tambah Pengguna
+          </button>
         </div>
         <div id="usersTableContainer">
           <div class="empty-state">
@@ -977,6 +1049,51 @@
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
   <div class="loading-text" id="loadingText">Memuat...</div>
+</div>
+
+<!-- User Form Modal -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="userModalTitle">Tambah Pengguna</div>
+      <button class="modal-close" onclick="closeUserModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="userId" />
+      <div class="form-group">
+        <label class="form-label">Nama Lengkap</label>
+        <input type="text" class="form-input" id="userName" placeholder="Masukkan nama pengguna" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-input" id="userEmail" placeholder="email@contoh.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password <span style="font-size:11px; font-weight:normal; color:var(--text-dim);" id="passwordHelp">(Kosongkan jika tidak ingin mengubah password)</span></label>
+        <input type="password" class="form-input" id="userPassword" placeholder="••••••••" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select class="form-select" id="userRole">
+          <option value="siswa">Siswa</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status Verifikasi</label>
+        <select class="form-select" id="userVerified">
+          <option value="false">Belum Verifikasi</option>
+          <option value="true">Terverifikasi</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeUserModal()">Batal</button>
+      <button class="btn-primary" onclick="saveUser()">
+        <span id="saveUserBtnText">Simpan Pengguna</span>
+      </button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1233,6 +1350,12 @@
           <td><span class="badge badge-streak">🔥 ${u.streak_days} hari</span></td>
           <td style="color:var(--text-secondary); font-size:12px;">${formatNumber(u.activity_count)} aktivitas</td>
           <td style="color:var(--text-dim); font-size:11px;">${esc(u.created_at || '—')}</td>
+          <td>
+            <div style="display:flex; gap:4px;">
+              <button class="action-icon-btn edit" title="Edit Pengguna" onclick='showEditUserModal(${JSON.stringify(u).replace(/'/g, "&#39;")})'>✏️</button>
+              <button class="action-icon-btn delete" title="Hapus Pengguna" onclick="deleteUser(${u.id}, '${esc(u.nama_lengkap)}')">🗑️</button>
+            </div>
+          </td>
         </tr>
       `).join('');
 
@@ -1246,6 +1369,7 @@
               <th>Streak</th>
               <th>Aktivitas</th>
               <th>Terdaftar</th>
+              <th>Aksi</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -1279,7 +1403,108 @@
   }
 
   function esc(s) {
+    if (s == null) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* ─── User Management Functions ─── */
+  function showAddUserModal() {
+    document.getElementById('userId').value = '';
+    document.getElementById('userName').value = '';
+    document.getElementById('userEmail').value = '';
+    document.getElementById('userPassword').value = '';
+    document.getElementById('userRole').value = 'siswa';
+    document.getElementById('userVerified').value = 'false';
+    document.getElementById('userModalTitle').textContent = 'Tambah Pengguna';
+    document.getElementById('passwordHelp').style.display = 'none';
+    document.getElementById('userModal').classList.add('show');
+  }
+
+  function showEditUserModal(user) {
+    document.getElementById('userId').value = user.id;
+    document.getElementById('userName').value = user.nama_lengkap || '';
+    document.getElementById('userEmail').value = user.email || '';
+    document.getElementById('userPassword').value = '';
+    document.getElementById('userRole').value = user.role || 'siswa';
+    document.getElementById('userVerified').value = user.is_verified ? 'true' : 'false';
+    document.getElementById('userModalTitle').textContent = 'Edit Pengguna';
+    document.getElementById('passwordHelp').style.display = 'inline';
+    document.getElementById('userModal').classList.add('show');
+  }
+
+  function closeUserModal() {
+    document.getElementById('userModal').classList.remove('show');
+  }
+
+  async function saveUser() {
+    const id = document.getElementById('userId').value;
+    const name = document.getElementById('userName').value.trim();
+    const email = document.getElementById('userEmail').value.trim();
+    const password = document.getElementById('userPassword').value;
+    const role = document.getElementById('userRole').value;
+    const isVerified = document.getElementById('userVerified').value === 'true';
+
+    if (!name || !email || (!id && !password)) {
+      showToast('Mohon isi semua field yang wajib!', 'error');
+      return;
+    }
+
+    const payload = {
+      nama_lengkap: name,
+      email: email,
+      role: role,
+      is_verified: isVerified
+    };
+    
+    if (password) payload.password = password;
+
+    const btn = document.getElementById('saveUserBtnText');
+    const oldText = btn.textContent;
+    btn.textContent = 'Menyimpan...';
+
+    try {
+      let url = '/admin/api/users';
+      let method = 'POST';
+      
+      if (id) {
+        url = `/admin/api/users/${id}`;
+        method = 'PUT';
+      }
+
+      const res = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Gagal menyimpan data');
+
+      showToast(d.message || 'Pengguna berhasil disimpan!');
+      closeUserModal();
+      loadUsers(currentPage, currentSearch);
+      loadStats();
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.textContent = oldText;
+    }
+  }
+
+  async function deleteUser(id, name) {
+    if (!confirm(`Apakah Anda yakin ingin menghapus pengguna "${name}"?`)) return;
+
+    try {
+      const res = await fetch(`/admin/api/users/${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Gagal menghapus pengguna');
+
+      showToast(d.message || 'Pengguna berhasil dihapus!');
+      loadUsers(currentPage, currentSearch);
+      loadStats();
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
   }
 
   /* ─── Load Recent Logs ─── */
