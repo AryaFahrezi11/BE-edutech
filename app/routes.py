@@ -193,22 +193,38 @@ def register_user():
 
         users_col.insert_one(user_doc)
 
-        msg = MIMEMultipart()
-        msg['From'] = SENDER_EMAIL
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f"Edutech App <{SENDER_EMAIL}>"
         msg['To'] = email
-        msg['Subject'] = "Kode OTP Edutech Kamu! 🚀"
+        msg['Subject'] = "Kode OTP Edutech Kamu"
 
-        body = f"""
-        Halo {nama}! 👋
+        text_body = f"""
+        Halo {nama},
 
         Pendaftaran kamu hampir selesai.
         Gunakan 6 digit Kode Rahasia di bawah ini untuk memverifikasi akun kamu:
 
         {kode_otp}
 
-        Ayo mulai petualangan belajarmu! Jangan berikan kode ini ke siapapun ya.
+        Jangan berikan kode ini ke siapapun.
         """
-        msg.attach(MIMEText(body, 'plain'))
+
+        html_body = f"""
+        <html>
+          <body>
+            <p>Halo <b>{nama}</b>, 👋</p>
+            <p>Pendaftaran kamu hampir selesai.</p>
+            <p>Gunakan 6 digit Kode Rahasia di bawah ini untuk memverifikasi akun kamu:</p>
+            <h2 style="color: #4CAF50; background: #e8f5e9; padding: 10px; width: fit-content; border-radius: 5px;">
+                {kode_otp}
+            </h2>
+            <p><i>Ayo mulai petualangan belajarmu! Jangan berikan kode ini ke siapapun ya.</i></p>
+          </body>
+        </html>
+        """
+
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
