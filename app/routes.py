@@ -15,6 +15,8 @@ import smtplib
 import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formatdate, make_msgid
+from email.header import Header
 
 
 main = Blueprint('main', __name__)
@@ -23,6 +25,83 @@ main = Blueprint('main', __name__)
 # --- KONFIGURASI EMAIL PENGIRIM ---
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+
+
+def send_email_notification(to_email, subject, nama_penerima, kode_otp, keperluan="Verifikasi Akun"):
+    """
+    Mengirim email dengan header RFC lengkap dan template HTML/teks seimbang
+    agar tidak dikategorikan sebagai spam oleh Gmail/filter email.
+    """
+    msg = MIMEMultipart('alternative')
+    msg['From'] = f"Edutech <{SENDER_EMAIL}>"
+    msg['To'] = to_email
+    msg['Subject'] = Header(subject, 'utf-8').encode()
+    msg['Date'] = formatdate(localtime=True)
+    msg['Message-ID'] = make_msgid(domain='gmail.com')
+    msg['Reply-To'] = SENDER_EMAIL
+
+    text_body = f"""Halo {nama_penerima},
+
+Berikut adalah kode OTP untuk {keperluan} Edutech kamu:
+
+{kode_otp}
+
+Kode ini hanya berlaku selama 10 menit. Jangan berikan kode ini kepada siapapun demi keamanan akun kamu.
+
+Salam hangat,
+Tim Edutech
+---
+Email ini dikirim otomatis oleh sistem Edutech. Jika kamu tidak merasa melakukan permintaan ini, silakan abaikan email ini.
+"""
+
+    html_body = f"""<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f6f9fc; margin: 0; padding: 24px; color: #334155;">
+  <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <div style="background-color: #4F46E5; padding: 24px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">EDUTECH</h1>
+    </div>
+    <div style="padding: 32px 24px;">
+      <p style="font-size: 16px; margin: 0 0 12px 0;">Halo <b>{nama_penerima}</b>,</p>
+      <p style="font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
+        Gunakan 6 digit kode OTP di bawah ini untuk <b>{keperluan}</b> kamu:
+      </p>
+      <div style="text-align: center; margin: 28px 0;">
+        <span style="display: inline-block; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #4F46E5; background-color: #EEF2FF; padding: 14px 28px; border-radius: 8px; border: 1px dashed #6366F1;">
+          {kode_otp}
+        </span>
+      </div>
+      <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0 0 8px 0;">
+        ⏱️ Kode ini bersifat rahasia dan berlaku selama 10 menit.
+      </p>
+      <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+        Demi keamanan, jangan pernah berikan kode ini kepada siapapun.
+      </p>
+    </div>
+    <div style="background-color: #f8fafc; padding: 16px 24px; border-top: 1px solid #e2e8f0; text-align: center;">
+      <p style="font-size: 12px; color: #94a3b8; margin: 0; line-height: 1.5;">
+        Email ini dikirim otomatis oleh Edutech App.<br>
+        Jika kamu tidak merasa melakukan permintaan ini, kamu dapat mengabaikan email ini.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+    msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server.starttls()
+    server.login(SENDER_EMAIL, SENDER_PASSWORD)
+    server.send_message(msg)
+    server.quit()
 
 # --- MONGODB COLLECTION ---
 # writing_analytics menggunakan db dari app.extensions
@@ -193,44 +272,13 @@ def register_user():
 
         users_col.insert_one(user_doc)
 
-        msg = MIMEMultipart('alternative')
-        msg['From'] = f"Edutech App <{SENDER_EMAIL}>"
-        msg['To'] = email
-        msg['Subject'] = "Kode OTP Edutech Kamu"
-
-        text_body = f"""
-        Halo {nama},
-
-        Pendaftaran kamu hampir selesai.
-        Gunakan 6 digit Kode Rahasia di bawah ini untuk memverifikasi akun kamu:
-
-        {kode_otp}
-
-        Jangan berikan kode ini ke siapapun.
-        """
-
-        html_body = f"""
-        <html>
-          <body>
-            <p>Halo <b>{nama}</b>, 👋</p>
-            <p>Pendaftaran kamu hampir selesai.</p>
-            <p>Gunakan 6 digit Kode Rahasia di bawah ini untuk memverifikasi akun kamu:</p>
-            <h2 style="color: #4CAF50; background: #e8f5e9; padding: 10px; width: fit-content; border-radius: 5px;">
-                {kode_otp}
-            </h2>
-            <p><i>Ayo mulai petualangan belajarmu! Jangan berikan kode ini ke siapapun ya.</i></p>
-          </body>
-        </html>
-        """
-
-        msg.attach(MIMEText(text_body, 'plain'))
-        msg.attach(MIMEText(html_body, 'html'))
-
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        send_email_notification(
+            to_email=email,
+            subject="[Edutech] Kode Verifikasi Pendaftaran Akun",
+            nama_penerima=nama,
+            kode_otp=kode_otp,
+            keperluan="Verifikasi Akun"
+        )
 
         return jsonify({
             "status": "success",
@@ -297,29 +345,14 @@ def forgot_password():
             {"$set": {"reset_otp": kode_otp, "updated_at": _now_ts_str()}}
         )
 
-        msg = MIMEMultipart()
-        msg['From'] = SENDER_EMAIL
-        msg['To'] = email
-        msg['Subject'] = "Reset Password Edutech Kamu! 🔑"
-
-        body = f"""
-        Halo {user_doc.get('nama_lengkap', 'Petualang')}! 👋
-
-        Kami menerima permintaan untuk mereset password akun Edutech kamu.
-        Gunakan 6 digit Kode Rahasia di bawah ini untuk mereset password:
-
-        {kode_otp}
-
-        Jika kamu tidak meminta reset password, abaikan saja email ini.
-        Jangan berikan kode ini ke siapapun ya.
-        """
-        msg.attach(MIMEText(body, 'plain'))
-
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        nama_target = user_doc.get('nama_lengkap', 'Pengguna')
+        send_email_notification(
+            to_email=email,
+            subject="[Edutech] Kode Reset Password Akun",
+            nama_penerima=nama_target,
+            kode_otp=kode_otp,
+            keperluan="Reset Password"
+        )
 
         return jsonify({"status": "success", "message": "Kode OTP reset password telah dikirim ke email kamu."}), 200
 
