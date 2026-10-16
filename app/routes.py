@@ -15,8 +15,7 @@ import smtplib
 import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.utils import formatdate, make_msgid
-from email.header import Header
+from email.utils import formatdate, formataddr
 
 
 main = Blueprint('main', __name__)
@@ -29,15 +28,15 @@ SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
 
 def send_email_notification(to_email, subject, nama_penerima, kode_otp, keperluan="Verifikasi Akun"):
     """
-    Mengirim email dengan header RFC lengkap dan template HTML/teks seimbang
-    agar tidak dikategorikan sebagai spam oleh Gmail/filter email.
+    Mengirim email dengan standar RFC bersih menggunakan SMTP Gmail.
+    Membiarkan server Gmail menghasilkan Message-ID valid secara otomatis
+    dan menggunakan formataddr agar tidak dicurigai sebagai spoofing/spam.
     """
     msg = MIMEMultipart('alternative')
-    msg['From'] = f"Edutech <{SENDER_EMAIL}>"
+    msg['From'] = formataddr(("Edutech", SENDER_EMAIL))
     msg['To'] = to_email
-    msg['Subject'] = Header(subject, 'utf-8').encode()
+    msg['Subject'] = subject
     msg['Date'] = formatdate(localtime=True)
-    msg['Message-ID'] = make_msgid(domain='gmail.com')
     msg['Reply-To'] = SENDER_EMAIL
 
     text_body = f"""Halo {nama_penerima},
